@@ -1,0 +1,76 @@
+version: "3.9"
+
+# Runs on the NVIDIA DGX Spark.
+# Cloudflare Tunnel exposes these services to the Vercel frontend.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: jw_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  vllm:
+    image: vllm/vllm-openai:v0.6.3
+    container_name: jw_vllm
+    runtime: nvidia
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    command: >
+      --model Qwen/Qwen2.5-14B-Instruct
+      --served-model-name jw-llm
+      --max-model-len 8192
+      --gpu-memory-utilization 0.85
+      --api-key ${DGX_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  embed:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    container_name: jw_embed
+    runtime: nvidia
+    command: >
+      --model-id BAAI/bge-large-en-v1.5
+      --port 8001
+      --api-key ${DGX_API_KEY}
+    ports:
+      - "8001:8001"
+    volumes:
+      - tei_cache:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: jw_cloudflared
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+      - vllm
+      - embed
+
+volumes:
+  qdrant_data:
+  hf_cache:
+  tei_cache:
