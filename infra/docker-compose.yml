@@ -60,6 +60,21 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
+  # Polite web crawler scheduler.
+  # Runs the spider on a fixed interval and stores raw HTML to the shared volume.
+  crawler:
+    image: python:3.11-slim
+    container_name: jw_crawler
+    working_dir: /app
+    volumes:
+      - ../crawler:/app/crawler:ro
+      - crawler_data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "pip install -r crawler/requirements.txt && python -m crawler.scheduler --spider wol --interval-minutes 360 --limit 200"
+    restart: unless-stopped
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: jw_cloudflared
@@ -74,3 +89,4 @@ volumes:
   qdrant_data:
   hf_cache:
   tei_cache:
+  crawler_data:
