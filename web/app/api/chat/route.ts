@@ -3,6 +3,7 @@ import { streamText, type CoreMessage } from "ai";
 import { embedQuery } from "@/lib/embed";
 import { qdrantSearch } from "@/lib/qdrant";
 import { mmrRerank } from "@/lib/mmr";
+import { liveFetchAndIngest } from "@/lib/liveIngest";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,6 +13,16 @@ type ChatMessage = {
   content: string;
 };
 
+function extractJwUrls(text: string): string[] {
+  const urls: string[] = [];
+  const re = /(https?:\/\/[^\s)\]]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    urls.push(m[1]);
+  }
+  return urls;
+}
+
 export async function POST(req: Request) {
   const body = (await req.json()) as { messages: ChatMessage[] };
   const messages = body.messages || [];
@@ -19,6 +30,21 @@ export async function POST(req: Request) {
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUser) {
     return new Response("No user message", { status: 400 });
+  }
+
+  // Live JW-only ingest (best-effort) BEFORE retrieval.
+  // Policy: We still answer ONLY from Qdrant chunks; live fetch just populates Qdrant.
+  const liveEnabled = (process.env.JW_LIVE_INGEST_ENABLED || "true") === "true";
+  if (liveEnabled) {
+    const candidates = extractJwUrls(lastUser.content);
+    const maxUrls = Number(process.env.JW_LIVE_INGEST_MAX_URLS || "2");
+    for (const u of candidates.slice(0, maxUrls)) {
+      try {
+        await liveFetchAndIngest(u);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // 1. Embed the latest user question.
@@ -56,19 +82,19 @@ export async function POST(req: Request) {
   // 4. Stream the answer via NVIDIA NIM (OpenAI-compatible).
   const nvidia = createOpenAI({
     baseURL: process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
-    apiKey: process.env.NVIDIA_API_KEY || ""
+    apiKey: process.env.NVIDIA_API_KEY || "",
   });
 
   const coreMessages: CoreMessage[] = messages.map((m) => ({
     role: m.role,
-    content: m.content
+    content: m.content,
   }));
 
   const result = streamText({
     model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
     system,
     messages: coreMessages,
-    temperature: 0.2
+    temperature: 0.2,
   });
 
   // Expose sources to the client via a custom header carrying JSON.
@@ -77,7 +103,7 @@ export async function POST(req: Request) {
     title: c.title,
     publication: c.publication,
     url: c.url,
-    score: c.score
+    score: c.score,
   }));
 
   const response = result.toDataStreamResponse();
