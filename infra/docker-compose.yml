@@ -76,7 +76,7 @@ services:
     restart: unless-stopped
 
   # Indexer: turns crawled HTML into chunks, embeddings, and upserts into Qdrant.
-  # This is the "company brain" ingest loop (JW-only).
+  # Runs continuously and only processes NEW raw files.
   indexer:
     image: python:3.11-slim
     container_name: jw_indexer
@@ -87,17 +87,17 @@ services:
     volumes:
       - ../indexer:/app/indexer:ro
       - crawler_data:/app/crawler_data:ro
+      - indexer_state:/app/state
     environment:
       - PYTHONUNBUFFERED=1
       - QDRANT_URL=http://qdrant:6333
-      # IMPORTANT: embedder endpoint URL shape varies; code now tries /embeddings and /v1/embeddings.
       - NVIDIA_EMBED_URL=http://embed:8001
       - NVIDIA_EMBED_MODEL=${NVIDIA_EMBED_MODEL:-NV-Embed-QA}
       - NVIDIA_API_KEY=${DGX_API_KEY}
       - QDRANT_API_KEY=${QDRANT_API_KEY}
       - QDRANT_COLLECTION=jw_research
     command: >
-      sh -c "pip install -r indexer/requirements.txt && python -m indexer.pipeline --raw-dir /app/crawler_data/raw --batch-size 16"
+      sh -c "pip install -r indexer/requirements.txt && python -m indexer.pipeline --raw-dir /app/crawler_data/raw --state /app/state/indexer_state.json --poll-seconds 30 --batch-size 16"
     restart: unless-stopped
 
   cloudflared:
@@ -115,3 +115,4 @@ volumes:
   hf_cache:
   tei_cache:
   crawler_data:
+  indexer_state:
