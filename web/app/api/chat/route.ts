@@ -53,10 +53,10 @@ export async function POST(req: Request) {
     "Context:\n" +
     contextBlock;
 
-  // 4. Stream the answer via the DGX LLM (OpenAI-compatible).
-  const dgx = createOpenAI({
-    baseURL: process.env.DGX_LLM_URL,
-    apiKey: process.env.DGX_API_KEY || ""
+  // 4. Stream the answer via NVIDIA NIM (OpenAI-compatible).
+  const nvidia = createOpenAI({
+    baseURL: process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
+    apiKey: process.env.NVIDIA_API_KEY || ""
   });
 
   const coreMessages: CoreMessage[] = messages.map((m) => ({
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   }));
 
   const result = streamText({
-    model: dgx("jw-llm"),
+    model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
     system,
     messages: coreMessages,
     temperature: 0.2

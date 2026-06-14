@@ -1,10 +1,10 @@
-// Embeds text using an OpenAI-compatible /v1/embeddings endpoint on DGX Spark.
+// Embeds text using NVIDIA NIM (OpenAI-compatible /v1/embeddings endpoint).
 export async function embedQuery(text: string): Promise<number[]> {
-  const url = process.env.DGX_EMBED_URL;
-  const model = process.env.DGX_EMBED_MODEL || "BAAI/bge-large-en-v1.5";
-  const key = process.env.DGX_API_KEY;
-  if (!url || !key) {
-    throw new Error("DGX_EMBED_URL and DGX_API_KEY must be set");
+  const url = process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
+  const model = process.env.NVIDIA_EMBED_MODEL || "NV-Embed-QA";
+  const key = process.env.NVIDIA_API_KEY;
+  if (!key) {
+    throw new Error("NVIDIA_API_KEY must be set");
   }
 
   const endpoint = url.replace(/\/$/, "") + "/embeddings";
@@ -12,9 +12,9 @@ export async function embedQuery(text: string): Promise<number[]> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + key
+      "Authorization": "Bearer " + key
     },
-    body: JSON.stringify({ model, input: text })
+    body: JSON.stringify({ model, input: [text] })
   });
 
   if (!res.ok) {
@@ -23,10 +23,13 @@ export async function embedQuery(text: string): Promise<number[]> {
   }
 
   const json = (await res.json()) as {
-    data: Array<{ embedding: number[] }>;
+    data: Array<{ embedding: number[]; index: number }>;
   };
-  if (!json.data || !json.data[0]) {
+  if (!json.data || json.data.length === 0) {
     throw new Error("Embedding response missing data");
   }
-  return json.data[0].embedding;
+
+  // Sort by index to ensure correct order (matches Python implementation)
+  const sortedData = json.data.sort((a, b) => a.index - b.index);
+  return sortedData[0].embedding;
 }

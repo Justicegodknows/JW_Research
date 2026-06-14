@@ -8,9 +8,9 @@ import requests
 
 class EmbeddingClient:
     def __init__(self, base_url: str | None = None, model: str | None = None, api_key: str | None = None) -> None:
-        self.base_url = (base_url or os.getenv("DGX_EMBED_URL") or "http://127.0.0.1:8001/v1").rstrip("/")
-        self.model = model or os.getenv("DGX_EMBED_MODEL") or "bge-large-en-v1.5"
-        self.api_key = api_key if api_key is not None else os.getenv("DGX_API_KEY", "")
+        self.base_url = (base_url or os.getenv("NVIDIA_EMBED_URL") or "https://integrate.api.nvidia.com/v1").rstrip("/")
+        self.model = model or os.getenv("NVIDIA_EMBED_MODEL") or "NV-Embed-QA"
+        self.api_key = api_key if api_key is not None else os.getenv("NVIDIA_API_KEY", "")
 
     def embed(self, texts: Iterable[str], batch_size: int = 32) -> List[List[float]]:
         all_vectors: List[List[float]] = []
