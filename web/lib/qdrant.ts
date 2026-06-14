@@ -8,7 +8,7 @@ export type Chunk = {
   vector: number[];
 };
 
-const COLLECTION = "jw_research";
+const COLLECTION = process.env.QDRANT_COLLECTION || "jw_research";
 
 export async function qdrantSearch(
   vector: number[],
@@ -37,8 +37,8 @@ export async function qdrantSearch(
       vector,
       limit: topK,
       with_payload: true,
-      with_vector: true
-    })
+      with_vector: true,
+    }),
   });
 
   if (!res.ok) {
@@ -70,7 +70,7 @@ export async function qdrantSearch(
       title: String(payload.title || "Untitled"),
       publication: String(payload.publication || payload.pub || ""),
       url: String(payload.url || ""),
-      vector: vec
+      vector: vec,
     };
   });
 }
