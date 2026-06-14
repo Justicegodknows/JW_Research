@@ -10,6 +10,10 @@ export type Chunk = {
 
 const COLLECTION = process.env.QDRANT_COLLECTION || "jw_research";
 
+function isLocalUrl(url: string): boolean {
+  return url.includes("localhost") || url.includes("127.0.0.1");
+}
+
 export async function qdrantSearch(
   vector: number[],
   topK: number
@@ -19,6 +23,7 @@ export async function qdrantSearch(
     throw new Error("QDRANT_URL must be set");
   }
 
+  const isLocal = isLocalUrl(base);
   const endpoint =
     base.replace(/\/$/, "") + "/collections/" + COLLECTION + "/points/search";
 
@@ -26,8 +31,9 @@ export async function qdrantSearch(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (key) {
-    headers["api-key"] = key;
+  // Only require API key for non-local connections
+  if (key || isLocal) {
+    if (key) headers["api-key"] = key;
   }
 
   const res = await fetch(endpoint, {

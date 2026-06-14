@@ -80,6 +80,10 @@ function chunkText(text: string, maxChars = 1200, overlap = 150): string[] {
   return out;
 }
 
+function isLocalUrl(url: string): boolean {
+  return url.includes("localhost") || url.includes("127.0.0.1");
+}
+
 async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payload: any }>) {
   const base = process.env.QDRANT_URL;
   if (!base) throw new Error("QDRANT_URL must be set");
@@ -90,7 +94,10 @@ async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payloa
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const key = process.env.QDRANT_API_KEY;
-  if (key) headers["api-key"] = key;
+  const isLocal = isLocalUrl(base);
+  if (key || isLocal) {
+    if (key) headers["api-key"] = key;
+  }
 
   const res = await fetch(endpoint, {
     method: "PUT",

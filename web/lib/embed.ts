@@ -8,22 +8,34 @@
 // This function is defensive about URL shapes because a common misconfig is
 // setting NVIDIA_EMBED_URL to include "/v1" while the server expects it, or
 // setting it without "/v1" while the code assumes it.
+function isLocalUrl(url: string): boolean {
+  return url.includes("localhost") || url.includes("127.0.0.1");
+}
+
 export async function embedQuery(text: string): Promise<number[]> {
   const base = process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
   const model = process.env.NVIDIA_EMBED_MODEL || "NV-Embed-QA";
   const key = process.env.NVIDIA_API_KEY;
-  if (!key) {
+
+  // Allow empty API key for local development
+  if (!key && !isLocalUrl(base)) {
     throw new Error("NVIDIA_API_KEY must be set");
   }
 
   // Try multiple endpoint variants to avoid 404s due to base URL differences.
   const trimmed = base.replace(/\/$/, "");
+  const isLocal = isLocalUrl(trimmed);
+
+  // For local TEI (Text Embeddings Inference), the base is just host:port
+  // For NVIDIA NIM or vLLM, base typically ends with /v1
   const candidates = Array.from(
     new Set([
+      // For local TEI service (no /v1 prefix needed)
+      isLocal ? trimmed + "/embeddings" : trimmed + "/embeddings",
       // If base already ends with /v1
       trimmed + "/embeddings",
-      // If base is host only
-      trimmed + "/v1/embeddings",
+      // If base is host only (add /v1)
+      isLocal ? trimmed : trimmed + "/v1/embeddings",
       // If base mistakenly contains /v1/v1
       trimmed.replace(/\/v1$/, "") + "/v1/embeddings",
     ])
@@ -31,12 +43,16 @@ export async function embedQuery(text: string): Promise<number[]> {
 
   let lastError: string | null = null;
   for (const endpoint of candidates) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (key) {
+      headers["Authorization"] = "Bearer " + key;
+    }
+
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + key,
-      },
+      headers,
       body: JSON.stringify({ model, input: [text] }),
     });
 
@@ -63,9 +79,9 @@ export async function embedQuery(text: string): Promise<number[]> {
 
   throw new Error(
     "Embedding request failed: 404 " +
-      (lastError || "not found") +
-      " (tried: " +
-      candidates.join(", ") +
-      ")"
+    (lastError || "not found") +
+    " (tried: " +
+    candidates.join(", ") +
+    ")"
   );
 }
