@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useChat } from "@ai-sdk/react";
-import { Send, Loader2, BookOpen } from "lucide-react";
+import { Send, Loader2, BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SourcesPanel, type Source } from "@/components/sources-panel";
@@ -12,6 +12,7 @@ type SourcesByMessageId = Record<string, Source[]>;
 
 export default function ChatPage() {
   const [sourcesByMsg, setSourcesByMsg] = React.useState<SourcesByMessageId>({});
+  const [isLoading, setIsLoading] = React.useState(false);
   const pendingSourcesRef = React.useRef<Source[] | null>(null);
 
   const {
@@ -19,11 +20,11 @@ export default function ChatPage() {
     input,
     handleInputChange,
     handleSubmit,
-    status,
     stop
   } = useChat({
     api: "/api/chat",
     onResponse(response) {
+      setIsLoading(true);
       const raw = response.headers.get("x-jw-sources");
       if (raw) {
         try {
@@ -35,6 +36,7 @@ export default function ChatPage() {
       }
     },
     onFinish(message) {
+      setIsLoading(false);
       if (pendingSourcesRef.current) {
         const s = pendingSourcesRef.current;
         setSourcesByMsg((prev) => ({ ...prev, [message.id]: s }));
@@ -42,8 +44,6 @@ export default function ChatPage() {
       }
     }
   });
-
-  const isLoading = status === "submitted" || status === "streaming";
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -63,29 +63,51 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="border-b border-border">
-        <div className="container flex h-14 items-center gap-2">
-          <BookOpen className="h-5 w-5" />
-          <h1 className="text-sm font-semibold">JW Research</h1>
-          <span className="ml-2 text-xs text-muted-foreground">
-            Grounded answers from JW Library
-          </span>
+      {/* Enhanced Header */}
+      <header className="border-b border-border/50 glass sticky top-0 z-10">
+        <div className="container flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 border border-accent/20">
+              <BookOpen className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <h1 className="text-base font-semibold tracking-tight">
+                JW Research
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                Grounded answers from JW Library
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50 text-xs text-muted-foreground">
+            <Sparkles className="h-3 w-3 text-accent" />
+            <span>AI Powered</span>
+          </div>
         </div>
       </header>
 
+      {/* Chat Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="container max-w-3xl py-6">
+        <div className="container max-w-3xl py-8">
           {messages.length === 0 && (
-            <div className="mt-20 text-center text-sm text-muted-foreground">
-              <p className="mb-2">Ask a question about JW Library content.</p>
-              <p className="text-xs">
-                Every claim will be cited with [n] and a Sources panel.
+            <div className="mt-16 text-center">
+              <div className="mb-6 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10 border border-accent/20 animate-pulse-glow">
+                  <Sparkles className="h-8 w-8 text-accent" />
+                </div>
+              </div>
+              <h2 className="mb-2 text-lg font-medium">
+                What would you like to explore?
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Ask questions about JW Library publications. Each answer is
+                grounded with source citations.
               </p>
             </div>
           )}
 
           <ul className="space-y-6">
-            {messages.map((m) => {
+            {messages.map((m, idx) => {
               const isUser = m.role === "user";
               const text =
                 typeof m.content === "string"
@@ -97,16 +119,17 @@ export default function ChatPage() {
                 <li
                   key={m.id}
                   className={cn(
-                    "flex",
+                    "flex animate-slide-up",
                     isUser ? "justify-end" : "justify-start"
                   )}
+                  style={{ animationDelay: `${idx * 50}ms` }}
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed",
+                      "max-w-[85%] rounded-2xl px-5 py-4 text-sm leading-relaxed shadow-sm",
                       isUser
                         ? "bg-primary text-primary-foreground"
-                        : "bg-card text-card-foreground border border-border"
+                        : "bg-card text-card-foreground border border-border/50"
                     )}
                   >
                     <div className="whitespace-pre-wrap">{text}</div>
@@ -117,10 +140,16 @@ export default function ChatPage() {
             })}
 
             {isLoading && (
-              <li className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Searching sources and thinking...
+              <li className="flex justify-start animate-fade-in">
+                <div className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card px-5 py-4 text-sm shadow-sm">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-2 rounded-full bg-accent animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 rounded-full bg-accent animate-bounce" />
+                  </div>
+                  <span className="text-muted-foreground">
+                    Searching sources and thinking...
+                  </span>
                 </div>
               </li>
             )}
@@ -128,31 +157,44 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <div className="border-t border-border bg-background">
-        <div className="container max-w-3xl py-3">
-          <form onSubmit={handleSubmit} className="flex items-end gap-2">
+      {/* Enhanced Input Area */}
+      <div className="border-t border-border/50 glass">
+        <div className="container max-w-3xl py-4">
+          <form onSubmit={handleSubmit} className="flex items-end gap-3">
             <Textarea
               value={input}
               onChange={handleInputChange}
               onKeyDown={onKeyDown}
               placeholder="Ask anything about JW Library content..."
               rows={2}
-              className="flex-1"
+              className="flex-1 min-h-[60px] resize-none"
               disabled={isLoading}
             />
             {isLoading ? (
-              <Button type="button" variant="outline" onClick={() => stop()}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => stop()}
+                className="h-auto px-4"
+              >
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Stop
               </Button>
             ) : (
-              <Button type="submit" size="icon" disabled={!input.trim()}>
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!input.trim()}
+                className="h-10 w-10"
+              >
                 <Send className="h-4 w-4" />
               </Button>
             )}
           </form>
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            Enter to send, Shift+Enter for newline. Answers are grounded; if
-            context is insufficient the model will refuse.
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            Press <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Enter</kbd> to send,{' '}
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Shift+Enter</kbd> for new line. Answers are grounded
+            with sources.
           </p>
         </div>
       </div>
