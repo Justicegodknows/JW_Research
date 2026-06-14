@@ -15,20 +15,24 @@ export async function qdrantSearch(
   topK: number
 ): Promise<Chunk[]> {
   const base = process.env.QDRANT_URL;
-  const key = process.env.QDRANT_API_KEY;
-  if (!base || !key) {
-    throw new Error("QDRANT_URL and QDRANT_API_KEY must be set");
+  if (!base) {
+    throw new Error("QDRANT_URL must be set");
   }
 
   const endpoint =
     base.replace(/\/$/, "") + "/collections/" + COLLECTION + "/points/search";
 
+  const key = process.env.QDRANT_API_KEY;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (key) {
+    headers["api-key"] = key;
+  }
+
   const res = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": key
-    },
+    headers,
     body: JSON.stringify({
       vector,
       limit: topK,
