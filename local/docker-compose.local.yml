@@ -1,0 +1,107 @@
+# Local testing stack for JW_Research.
+#
+# PURPOSE:
+#   Spin up only what you need to test the RAG pipeline locally on the
+#   DGX Spark (or any dev machine) WITHOUT touching the production
+#   infra/docker-compose.yml (Vercel / Cloudflare / DGX GPU services).
+#
+# WHAT THIS RUNS:
+#   - qdrant       : local vector DB (no auth, for testing only)
+#   - embed (TEI)  : local embeddings server (GPU). Comment out if no GPU.
+#   - crawler      : polite spider scheduler (writes raw HTML to a volume)
+#   - indexer      : follows new raw files, embeds + upserts into qdrant
+#
+# WHAT THIS DOES NOT RUN:
+#   - vLLM (use NVIDIA hosted LLM for local tests via web/.env.local), or run it separately
+#   - cloudflared (not needed locally)
+#
+# USAGE:
+#   cd local
+#   cp .env.example .env
+#   docker compose -f docker-compose.local.yml up -d qdrant embed
+#   docker compose -f docker-compose.local.yml up crawler indexer
+#
+# The Next.js web app is run OUTSIDE docker for fast local dev:
+#   cd web
+#   cp .env.example .env.local   (then edit values, see local/README.md)
+#   npm install && npm run dev
+
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: jw_qdrant_local
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data_local:/qdrant/storage
+    # NOTE: No API key here on purpose -> local testing is auth-free.
+    restart: unless-stopped
+
+  # Local embeddings server (GPU). If you have no GPU locally, comment this
+  # whole service out and point NVIDIA_EMBED_URL at the NVIDIA hosted API
+  # in local/.env and web/.env.local instead.
+  embed:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    container_name: jw_embed_local
+    runtime: nvidia
+    command: >
+      --model-id BAAI/bge-large-en-v1.5
+      --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - tei_cache_local:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  crawler:
+    image: python:3.11-slim
+    container_name: jw_crawler_local
+    working_dir: /app
+    volumes:
+      - ../crawler:/app/crawler:ro
+      - crawler_data_local:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Smaller limits for local testing.
+    command: >
+      sh -c "pip install -r crawler/requirements.txt && python -m crawler.scheduler --spider wol --interval-minutes 720 --limit 30"
+    restart: unless-stopped
+
+  indexer:
+    image: python:3.11-slim
+    container_name: jw_indexer_local
+    working_dir: /app
+    depends_on:
+      - qdrant
+      - embed
+    volumes:
+      - ../indexer:/app/indexer:ro
+      - crawler_data_local:/app/crawler_data:ro
+      - indexer_state_local:/app/state
+    environment:
+      - PYTHONUNBUFFERED=1
+      - QDRANT_URL=http://qdrant:6333
+      - NVIDIA_EMBED_URL=${NVIDIA_EMBED_URL:-http://embed:8001}
+      - NVIDIA_EMBED_MODEL=${NVIDIA_EMBED_MODEL:-NV-Embed-QA}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - QDRANT_API_KEY=
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-jw_research}
+    command: >
+      sh -c "pip install -r indexer/requirements.txt && python -m indexer.pipeline --raw-dir /app/crawler_data/raw --state /app/state/indexer_state.json --poll-seconds 30 --batch-size 8"
+    restart: unless-stopped
+
+volumes:
+  qdrant_data_local:
+  tei_cache_local:
+  crawler_data_local:
+  indexer_state_local:

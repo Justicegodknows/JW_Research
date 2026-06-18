@@ -1,0 +1,59 @@
+version: "3.9"
+
+# Local testing stack for JW Research.
+# - Does NOT touch infra/docker-compose.yml (production DGX + cloudflared stack)
+# - Runs Qdrant locally (no auth)
+# - Runs the Next.js web app locally in Docker
+#
+# Usage:
+#   cd infra
+#   docker compose -f docker-compose.local.yml --env-file .env.local up --build
+#
+# Then open:
+#   http://localhost:3000
+#
+# Notes:
+# - This stack expects you to provide NVIDIA_* env vars that point to your DGX
+#   endpoints (LLM + embeddings) OR any other OpenAI-compatible endpoints you use.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: jw_qdrant_local
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data_local:/qdrant/storage
+    restart: unless-stopped
+
+  web:
+    image: node:20-slim
+    container_name: jw_web_local
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - NVIDIA_LLM_URL=${NVIDIA_LLM_URL}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - NVIDIA_MODEL=${NVIDIA_MODEL:-qwen/qwen3.5-397b-a17b}
+      - NVIDIA_EMBED_URL=${NVIDIA_EMBED_URL}
+      - NVIDIA_EMBED_MODEL=${NVIDIA_EMBED_MODEL:-NV-Embed-QA}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-jw_research}
+      - JW_LIVE_INGEST_ENABLED=${JW_LIVE_INGEST_ENABLED:-true}
+      - JW_LIVE_INGEST_MAX_URLS=${JW_LIVE_INGEST_MAX_URLS:-2}
+      - JW_LIVE_INGEST_MAX_CHUNKS=${JW_LIVE_INGEST_MAX_CHUNKS:-6}
+      - JW_USER_AGENT=${JW_USER_AGENT:-JW_Research_Personal_Bot/0.1 (private study; contact: owner)}
+    volumes:
+      - ../web:/app
+    command: sh -c "npm ci && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  qdrant_data_local:
