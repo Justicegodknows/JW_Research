@@ -8,6 +8,15 @@ import { liveFetchAndIngest } from "@/lib/liveIngest";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      Allow: "POST, OPTIONS",
+    },
+  });
+}
+
 type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -63,17 +72,46 @@ export async function POST(req: Request) {
 
       if (shouldProxy) {
         const target = backendUrl.replace(/\/$/, "") + "/api/chat";
-        const upstream = await fetch(target, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const headers = new Headers(upstream.headers);
-        return new Response(upstream.body, {
-          status: upstream.status,
-          statusText: upstream.statusText,
-          headers,
-        });
+        const proxyTimeoutMs = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "15000");
+        try {
+          const upstream = await fetch(target, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(proxyTimeoutMs),
+          });
+
+          const fallbackStatuses = new Set([404, 405]);
+          if (!upstream.ok && !fallbackStatuses.has(upstream.status) && upstream.status < 500) {
+            const headers = new Headers(upstream.headers);
+            return new Response(upstream.body, {
+              status: upstream.status,
+              statusText: upstream.statusText,
+              headers,
+            });
+          }
+
+          if (upstream.ok) {
+            const headers = new Headers(upstream.headers);
+            return new Response(upstream.body, {
+              status: upstream.status,
+              statusText: upstream.statusText,
+              headers,
+            });
+          }
+
+          const allow = upstream.headers.get("allow") || "";
+          console.warn(
+            "Proxy backend rejected /api/chat; falling back to local RAG.",
+            JSON.stringify({ status: upstream.status, allow })
+          );
+        } catch (proxyErr) {
+          const message = proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+          console.warn(
+            "Proxy backend request failed; falling back to local RAG.",
+            JSON.stringify({ target, message })
+          );
+        }
       }
     }
 
