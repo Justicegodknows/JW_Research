@@ -51,6 +51,21 @@ function buildSystemPrompt(contextBlock: string): string {
   );
 }
 
+function isTimeoutLikeError(err: unknown): boolean {
+  if (!err) return false;
+  if (err instanceof DOMException) {
+    return err.name === "TimeoutError" || err.name === "AbortError";
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("abort") ||
+    lower.includes("aborted")
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { messages: ChatMessage[] };
@@ -72,7 +87,7 @@ export async function POST(req: Request) {
 
       if (shouldProxy) {
         const target = backendUrl.replace(/\/$/, "") + "/api/chat";
-        const proxyTimeoutMs = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "15000");
+        const proxyTimeoutMs = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "5000");
         try {
           const upstream = await fetch(target, {
             method: "POST",
@@ -193,14 +208,17 @@ export async function POST(req: Request) {
     return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    const timeout = isTimeoutLikeError(err);
     console.error("/api/chat failed:", message);
     return Response.json(
       {
         error: "Chat backend failed",
         detail: message,
-        hint: "Verify NVIDIA_EMBED_URL, NVIDIA_EMBED_MODEL, QDRANT_URL, and related service availability.",
+        hint: timeout
+          ? "Upstream service timeout. Verify NVIDIA_EMBED_URL/NVIDIA_EMBED_MODEL, QDRANT_URL, firewall allowlists, and timeout env vars."
+          : "Verify NVIDIA_EMBED_URL, NVIDIA_EMBED_MODEL, QDRANT_URL, and related service availability.",
       },
-      { status: 500 }
+      { status: timeout ? 504 : 500 }
     );
   }
 }

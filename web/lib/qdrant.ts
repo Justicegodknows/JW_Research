@@ -19,7 +19,7 @@ export async function qdrantSearch(
   topK: number
 ): Promise<Chunk[]> {
   const base = process.env.QDRANT_URL;
-  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "10000");
+  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "5000");
   if (!base) {
     throw new Error("QDRANT_URL must be set");
   }
@@ -37,17 +37,27 @@ export async function qdrantSearch(
     if (key) headers["api-key"] = key;
   }
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      vector,
-      limit: topK,
-      with_payload: true,
-      with_vector: true,
-    }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        vector,
+        limit: topK,
+        with_payload: true,
+        with_vector: true,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const lower = message.toLowerCase();
+    if (lower.includes("timeout") || lower.includes("abort")) {
+      throw new Error("Qdrant search timed out after " + timeoutMs + "ms (endpoint: " + endpoint + ")");
+    }
+    throw new Error("Qdrant search transport failed: " + message + " (endpoint: " + endpoint + ")");
+  }
 
   if (!res.ok) {
     const body = await res.text();

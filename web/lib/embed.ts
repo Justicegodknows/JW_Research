@@ -16,7 +16,7 @@ export async function embedQuery(text: string): Promise<number[]> {
   const base = process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
   const model = process.env.NVIDIA_EMBED_MODEL || "NV-Embed-QA";
   const key = process.env.NVIDIA_API_KEY;
-  const timeoutMs = Number(process.env.NVIDIA_EMBED_TIMEOUT_MS || "15000");
+  const timeoutMs = Number(process.env.NVIDIA_EMBED_TIMEOUT_MS || "5000");
 
   // Allow empty API key for local development
   if (!key && !isLocalUrl(base)) {
@@ -50,12 +50,24 @@ export async function embedQuery(text: string): Promise<number[]> {
       headers["Authorization"] = "Bearer " + key;
     }
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ model, input: [text] }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model, input: [text] }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const lower = message.toLowerCase();
+      if (lower.includes("timeout") || lower.includes("abort")) {
+        throw new Error(
+          "Embedding request timed out after " + timeoutMs + "ms (endpoint: " + endpoint + ")"
+        );
+      }
+      throw new Error("Embedding request transport failed: " + message + " (endpoint: " + endpoint + ")");
+    }
 
     if (res.ok) {
       const json = (await res.json()) as {

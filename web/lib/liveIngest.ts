@@ -87,7 +87,7 @@ function isLocalUrl(url: string): boolean {
 async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payload: any }>) {
   const base = process.env.QDRANT_URL;
   if (!base) throw new Error("QDRANT_URL must be set");
-  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "10000");
+  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "5000");
   const collection = process.env.QDRANT_COLLECTION || "jw_research";
 
   const endpoint =
@@ -118,7 +118,7 @@ export async function liveFetchAndIngest(url: string): Promise<{ ingested: numbe
     return { ingested: 0 };
   }
 
-  const timeoutMs = Number(process.env.JW_LIVE_INGEST_TIMEOUT_MS || "12000");
+  const timeoutMs = Number(process.env.JW_LIVE_INGEST_TIMEOUT_MS || "8000");
 
   // Polite fetch: single page, no aggressive parallelism.
   const res = await fetch(url, {
