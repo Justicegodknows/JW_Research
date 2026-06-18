@@ -138,6 +138,7 @@ export async function POST(req: Request) {
       system,
       messages: coreMessages,
       temperature: 0.2,
+      maxRetries: 0,
     });
 
     // Expose sources to the client via a custom header carrying JSON.

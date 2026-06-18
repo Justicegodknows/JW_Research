@@ -16,6 +16,7 @@ export async function embedQuery(text: string): Promise<number[]> {
   const base = process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
   const model = process.env.NVIDIA_EMBED_MODEL || "NV-Embed-QA";
   const key = process.env.NVIDIA_API_KEY;
+  const timeoutMs = Number(process.env.NVIDIA_EMBED_TIMEOUT_MS || "15000");
 
   // Allow empty API key for local development
   if (!key && !isLocalUrl(base)) {
@@ -53,6 +54,7 @@ export async function embedQuery(text: string): Promise<number[]> {
       method: "POST",
       headers,
       body: JSON.stringify({ model, input: [text] }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (res.ok) {

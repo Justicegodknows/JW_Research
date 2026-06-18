@@ -13,6 +13,8 @@ type SourcesByMessageId = Record<string, Source[]>;
 export default function ChatPage() {
   const [sourcesByMsg, setSourcesByMsg] = React.useState<SourcesByMessageId>({});
   const [isLoading, setIsLoading] = React.useState(false);
+  const [uiError, setUiError] = React.useState<string | null>(null);
+  const [lastSubmittedInput, setLastSubmittedInput] = React.useState("");
   const pendingSourcesRef = React.useRef<Source[] | null>(null);
 
   const {
@@ -20,10 +22,19 @@ export default function ChatPage() {
     input,
     handleInputChange,
     handleSubmit,
+    append,
     stop
   } = useChat({
     api: "/api/chat",
     onResponse(response) {
+      if (!response.ok) {
+        setIsLoading(false);
+        pendingSourcesRef.current = null;
+        setUiError("Request failed. Please check your backend and environment settings.");
+        return;
+      }
+
+      setUiError(null);
       setIsLoading(true);
       const raw = response.headers.get("x-jw-sources");
       if (raw) {
@@ -42,8 +53,26 @@ export default function ChatPage() {
         setSourcesByMsg((prev) => ({ ...prev, [message.id]: s }));
         pendingSourcesRef.current = null;
       }
+    },
+    onError(error) {
+      setIsLoading(false);
+      pendingSourcesRef.current = null;
+      setUiError(error?.message || "Request failed. Please try again.");
     }
   });
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    setUiError(null);
+    setLastSubmittedInput(input.trim());
+    handleSubmit(e);
+  };
+
+  const onRetry = async () => {
+    const text = lastSubmittedInput.trim();
+    if (!text || isLoading) return;
+    setUiError(null);
+    await append({ role: "user", content: text });
+  };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -160,7 +189,22 @@ export default function ChatPage() {
       {/* Enhanced Input Area */}
       <div className="border-t border-border/50 glass">
         <div className="container max-w-3xl py-4">
-          <form onSubmit={handleSubmit} className="flex items-end gap-3">
+          {uiError && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <span>{uiError}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void onRetry()}
+                disabled={isLoading || !lastSubmittedInput.trim()}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+
+          <form onSubmit={onSubmit} className="flex items-end gap-3">
             <Textarea
               value={input}
               onChange={handleInputChange}

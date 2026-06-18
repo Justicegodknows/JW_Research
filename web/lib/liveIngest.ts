@@ -87,6 +87,7 @@ function isLocalUrl(url: string): boolean {
 async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payload: any }>) {
   const base = process.env.QDRANT_URL;
   if (!base) throw new Error("QDRANT_URL must be set");
+  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "10000");
   const collection = process.env.QDRANT_COLLECTION || "jw_research";
 
   const endpoint =
@@ -103,6 +104,7 @@ async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payloa
     method: "PUT",
     headers,
     body: JSON.stringify({ points }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) {
@@ -116,6 +118,8 @@ export async function liveFetchAndIngest(url: string): Promise<{ ingested: numbe
     return { ingested: 0 };
   }
 
+  const timeoutMs = Number(process.env.JW_LIVE_INGEST_TIMEOUT_MS || "12000");
+
   // Polite fetch: single page, no aggressive parallelism.
   const res = await fetch(url, {
     method: "GET",
@@ -126,6 +130,7 @@ export async function liveFetchAndIngest(url: string): Promise<{ ingested: numbe
       "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.9",
     },
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) {

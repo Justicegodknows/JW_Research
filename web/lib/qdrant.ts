@@ -19,6 +19,7 @@ export async function qdrantSearch(
   topK: number
 ): Promise<Chunk[]> {
   const base = process.env.QDRANT_URL;
+  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "10000");
   if (!base) {
     throw new Error("QDRANT_URL must be set");
   }
@@ -45,6 +46,7 @@ export async function qdrantSearch(
       with_payload: true,
       with_vector: true,
     }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) {
