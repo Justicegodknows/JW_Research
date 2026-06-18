@@ -1,0 +1,10 @@
+crawler
+indexer
+local
+infra
+.git
+.gitignore
+*.md
+.env.example
+node_modules
+.next
