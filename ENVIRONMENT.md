@@ -70,17 +70,23 @@ export NVIDIA_EMBED_URL="http://localhost:8001"
 export NVIDIA_LLM_URL="http://localhost:8000"
 ```
 
-### Production (Vercel)
+### Production (Vercel) with Cloudflare Tunnel
 ```bash
-# These should be set in Vercel dashboard
-NVIDIA_API_KEY
-QDRANT_URL (pointing to Cloudflare tunnel)
-NVIDIA_LLM_URL (pointing to Cloudflare tunnel)
+# Set in Vercel Dashboard → Environment Variables
+NVIDIA_API_KEY=<your-nvidia-api-key>
+QDRANT_URL=https://qdrant.theocracy.me
+NVIDIA_LLM_URL=https://llm.theocracy.me
+NVIDIA_EMBED_URL=https://embed.theocracy.me
 ```
 
-### DGX Server
+### DGX Server (Docker Compose)
 ```bash
-# In docker-compose environment
-HF_TOKEN
-DGX_API_KEY
-CLOUDFLARE_TUNNEL_TOKEN
+# Export before running docker compose up
+export CLOUDFLARE_TUNNEL_TOKEN="<tunnel-token-from-cloudflare-dashboard>"
+export DGX_API_KEY="<api-key-for-vllm-and-embeddings>"
+export HF_TOKEN="<hugging-face-token-for-model-downloads>"
+export QDRANT_API_KEY="<optional-qdrant-api-key>"
+
+# Start services
+cd infra && docker compose up -d
+```

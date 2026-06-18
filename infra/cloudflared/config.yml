@@ -1,14 +1,17 @@
-# Cloudflare Tunnel routes. Replace <domain> with your real domain.
-# Each hostname must also have a DNS CNAME pointing to <tunnel-id>.cfargotunnel.com.
+# Cloudflare Tunnel configuration for theocracy.me domain
+# Routes backend services from DGX Spark to Cloudflare Tunnel
+# Vercel frontend is configured separately in Cloudflare DNS
 
 tunnel: jw-research
 credentials-file: /etc/cloudflared/jw-research.json
 
 ingress:
-  - hostname: qdrant.<domain>
+  # Backend API services routed through tunnel
+  - hostname: qdrant.theocracy.me
     service: http://qdrant:6333
-  - hostname: llm.<domain>
+  - hostname: llm.theocracy.me
     service: http://vllm:8000
-  - hostname: embed.<domain>
+  - hostname: embed.theocracy.me
     service: http://embed:8001
+  # Default 404 for any unmatched routes
   - service: http_status:404
