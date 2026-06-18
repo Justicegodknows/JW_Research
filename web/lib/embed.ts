@@ -28,16 +28,15 @@ export async function embedQuery(text: string): Promise<number[]> {
 
   // For local TEI (Text Embeddings Inference), the base is just host:port
   // For NVIDIA NIM or vLLM, base typically ends with /v1
+  const noV1Base = trimmed.replace(/\/v1$/, "");
   const candidates = Array.from(
     new Set([
-      // For local TEI service (no /v1 prefix needed)
-      isLocal ? trimmed + "/embeddings" : trimmed + "/embeddings",
-      // If base already ends with /v1
+      // Host + /embeddings (works for TEI and some hosted gateways)
+      noV1Base + "/embeddings",
+      // Host + /v1/embeddings (OpenAI-compatible default)
+      noV1Base + "/v1/embeddings",
+      // Preserve exact base shape with /embeddings for custom deployments
       trimmed + "/embeddings",
-      // If base is host only (add /v1)
-      isLocal ? trimmed : trimmed + "/v1/embeddings",
-      // If base mistakenly contains /v1/v1
-      trimmed.replace(/\/v1$/, "") + "/v1/embeddings",
     ])
   );
 

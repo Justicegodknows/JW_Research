@@ -43,80 +43,93 @@ function buildSystemPrompt(contextBlock: string): string {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as { messages: ChatMessage[] };
-  const messages = body.messages || [];
+  try {
+    const body = (await req.json()) as { messages: ChatMessage[] };
+    const messages = body.messages || [];
 
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUser) {
-    return new Response("No user message", { status: 400 });
-  }
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) {
+      return new Response("No user message", { status: 400 });
+    }
 
-  // Live JW-only ingest (best-effort) BEFORE retrieval.
-  // Policy: We still answer ONLY from Qdrant chunks; live fetch just populates Qdrant.
-  const liveEnabled = (process.env.JW_LIVE_INGEST_ENABLED || "true") === "true";
-  if (liveEnabled) {
-    const candidates = extractJwUrls(lastUser.content);
-    const maxUrls = Number(process.env.JW_LIVE_INGEST_MAX_URLS || "2");
-    for (const u of candidates.slice(0, maxUrls)) {
-      try {
-        await liveFetchAndIngest(u);
-      } catch {
-        // ignore
+    // Live JW-only ingest (best-effort) BEFORE retrieval.
+    // Policy: We still answer ONLY from Qdrant chunks; live fetch just populates Qdrant.
+    const liveEnabled = (process.env.JW_LIVE_INGEST_ENABLED || "true") === "true";
+    if (liveEnabled) {
+      const candidates = extractJwUrls(lastUser.content);
+      const maxUrls = Number(process.env.JW_LIVE_INGEST_MAX_URLS || "2");
+      for (const u of candidates.slice(0, maxUrls)) {
+        try {
+          await liveFetchAndIngest(u);
+        } catch {
+          // ignore
+        }
       }
     }
+
+    // 1. Embed the latest user question.
+    const qvec = await embedQuery(lastUser.content);
+
+    // 2. Top-k=8 from Qdrant, then MMR re-rank to 6.
+    const raw = await qdrantSearch(qvec, 8);
+    const ranked = mmrRerank(qvec, raw, 6, 0.6);
+
+    // 3. Build a numbered context block and the system prompt.
+    const contextBlock = ranked
+      .map((c, i) => {
+        const header =
+          "[" +
+          (i + 1) +
+          "] " +
+          c.title +
+          (c.publication ? " - " + c.publication : "") +
+          (c.url ? " (" + c.url + ")" : "");
+        return header + "\n" + c.text;
+      })
+      .join("\n\n---\n\n");
+
+    const system = buildSystemPrompt(contextBlock);
+
+    // 4. Stream the answer via NVIDIA NIM (OpenAI-compatible).
+    const nvidia = createOpenAI({
+      baseURL: process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
+      apiKey: process.env.NVIDIA_API_KEY || "",
+    });
+
+    const coreMessages: CoreMessage[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const result = streamText({
+      model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
+      system,
+      messages: coreMessages,
+      temperature: 0.2,
+    });
+
+    // Expose sources to the client via a custom header carrying JSON.
+    const sources = ranked.map((c, i) => ({
+      n: i + 1,
+      title: c.title,
+      publication: c.publication,
+      url: c.url,
+      score: c.score,
+    }));
+
+    const response = result.toDataStreamResponse();
+    response.headers.set("x-jw-sources", encodeURIComponent(JSON.stringify(sources)));
+    return response;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("/api/chat failed:", message);
+    return Response.json(
+      {
+        error: "Chat backend failed",
+        detail: message,
+        hint: "Verify NVIDIA_EMBED_URL, NVIDIA_EMBED_MODEL, QDRANT_URL, and related service availability.",
+      },
+      { status: 500 }
+    );
   }
-
-  // 1. Embed the latest user question.
-  const qvec = await embedQuery(lastUser.content);
-
-  // 2. Top-k=8 from Qdrant, then MMR re-rank to 6.
-  const raw = await qdrantSearch(qvec, 8);
-  const ranked = mmrRerank(qvec, raw, 6, 0.6);
-
-  // 3. Build a numbered context block and the system prompt.
-  const contextBlock = ranked
-    .map((c, i) => {
-      const header =
-        "[" +
-        (i + 1) +
-        "] " +
-        c.title +
-        (c.publication ? " - " + c.publication : "") +
-        (c.url ? " (" + c.url + ")" : "");
-      return header + "\n" + c.text;
-    })
-    .join("\n\n---\n\n");
-
-  const system = buildSystemPrompt(contextBlock);
-
-  // 4. Stream the answer via NVIDIA NIM (OpenAI-compatible).
-  const nvidia = createOpenAI({
-    baseURL: process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
-    apiKey: process.env.NVIDIA_API_KEY || "",
-  });
-
-  const coreMessages: CoreMessage[] = messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
-
-  const result = streamText({
-    model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
-    system,
-    messages: coreMessages,
-    temperature: 0.2,
-  });
-
-  // Expose sources to the client via a custom header carrying JSON.
-  const sources = ranked.map((c, i) => ({
-    n: i + 1,
-    title: c.title,
-    publication: c.publication,
-    url: c.url,
-    score: c.score,
-  }));
-
-  const response = result.toDataStreamResponse();
-  response.headers.set("x-jw-sources", encodeURIComponent(JSON.stringify(sources)));
-  return response;
 }
