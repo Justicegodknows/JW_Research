@@ -1,0 +1,17 @@
+Server: CloudFront
+Content-Type: text/html; charset=utf-8
+Date: Thu, 18 Jun 2026 20:47:04 GMT
+Content-Encoding: gzip
+Cache-Control: s-maxage=3600, max-age=1800, must-revalidate
+X-Page-Built: Thu, 18 Jun 2026 20:40:41 +0000
+Last-Modified: Thu, 18 Jun 2026 20:40:41 GMT
+Expires: Thu, 18 Jun 2026 21:10:41 +0000
+X-Built-On: 320
+X-Frame-Options: SAMEORIGIN
+Vary: Accept-Encoding,Accept-Encoding
+X-Cache: Hit from cloudfront
+Via: 1.1 f2a51982e289d888963f4f93b48c5f22.cloudfront.net (CloudFront)
+X-Amz-Cf-Pop: FRA60-P7
+X-Amz-Cf-Id: lffGZuZ2m493L1JEqIrnEXLrV2hTixb2Kd3CpnqfOjrIGz_ZD0ILbA==
+Age: 234
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload

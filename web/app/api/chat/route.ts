@@ -70,34 +70,46 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { messages: ChatMessage[] };
     const backendUrl = (process.env.BACKEND_URL || "").trim();
+    const backendPath = (process.env.BACKEND_CHAT_PATH || "/api/chat").trim() || "/api/chat";
+    const allowLocalFallback = (process.env.BACKEND_ALLOW_LOCAL_FALLBACK || "false") === "true";
+    const proxyHop = req.headers.get("x-jw-proxy-hop") === "1";
 
     // Optional production mode: forward chat traffic to an external backend
     // (for example, a Cloudflare-routed backend) instead of running local RAG.
-    if (backendUrl) {
-      let shouldProxy = true;
-      try {
-        const incoming = new URL(req.url);
-        const configured = new URL(backendUrl);
-        if (incoming.origin === configured.origin) {
-          shouldProxy = false;
-        }
-      } catch {
-        shouldProxy = true;
-      }
+    if (backendUrl && !proxyHop) {
+      const shouldProxy = true;
 
       if (shouldProxy) {
-        const target = backendUrl.replace(/\/$/, "") + "/api/chat";
+        const normalizedPath = backendPath.startsWith("/") ? backendPath : "/" + backendPath;
+        const target = backendUrl.replace(/\/$/, "") + normalizedPath;
         const proxyTimeoutMs = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "5000");
         try {
           const upstream = await fetch(target, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-jw-proxy-hop": "1",
+            },
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(proxyTimeoutMs),
           });
 
-          const fallbackStatuses = new Set([404, 405]);
-          if (!upstream.ok && !fallbackStatuses.has(upstream.status) && upstream.status < 500) {
+          if (!upstream.ok) {
+            if (!allowLocalFallback) {
+              const headers = new Headers(upstream.headers);
+              return new Response(upstream.body, {
+                status: upstream.status,
+                statusText: upstream.statusText,
+                headers,
+              });
+            }
+
+            const allow = upstream.headers.get("allow") || "";
+            console.warn(
+              "Proxy backend returned non-OK; falling back to local RAG.",
+              JSON.stringify({ status: upstream.status, allow })
+            );
+          } else {
             const headers = new Headers(upstream.headers);
             return new Response(upstream.body, {
               status: upstream.status,
@@ -105,23 +117,23 @@ export async function POST(req: Request) {
               headers,
             });
           }
-
-          if (upstream.ok) {
-            const headers = new Headers(upstream.headers);
-            return new Response(upstream.body, {
-              status: upstream.status,
-              statusText: upstream.statusText,
-              headers,
-            });
-          }
-
-          const allow = upstream.headers.get("allow") || "";
-          console.warn(
-            "Proxy backend rejected /api/chat; falling back to local RAG.",
-            JSON.stringify({ status: upstream.status, allow })
-          );
         } catch (proxyErr) {
           const message = proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+          const timeout = isTimeoutLikeError(proxyErr);
+          if (!allowLocalFallback) {
+            return Response.json(
+              {
+                error: "Proxy backend failed",
+                detail: message,
+                target,
+                hint: timeout
+                  ? "Proxy timeout to DGX backend. Verify Cloudflare Tunnel route and backend health."
+                  : "Proxy connection to DGX backend failed. Verify BACKEND_URL/BACKEND_CHAT_PATH and network reachability.",
+              },
+              { status: timeout ? 504 : 502 }
+            );
+          }
+
           console.warn(
             "Proxy backend request failed; falling back to local RAG.",
             JSON.stringify({ target, message })
@@ -190,7 +202,12 @@ export async function POST(req: Request) {
       model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
       system,
       messages: coreMessages,
-      temperature: 0.2,
+      temperature: 0.6,
+      topP: 0.95,
+      topK: 20,
+      maxTokens: 16384,
+      presencePenalty: 0,
+      frequencyPenalty: 1,
       maxRetries: 0,
     });
 

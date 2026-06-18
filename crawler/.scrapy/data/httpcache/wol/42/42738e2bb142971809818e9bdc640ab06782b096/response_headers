@@ -1,0 +1,13 @@
+Server: CloudFront
+Content-Type: text/plain
+Date: Wed, 17 Jun 2026 23:19:53 GMT
+Content-Encoding: gzip
+Last-Modified: Tue, 19 Sep 2017 12:57:29 GMT
+Etag: W/"59c11439-e4"
+Vary: Accept-Encoding,Accept-Encoding
+X-Cache: Hit from cloudfront
+Via: 1.1 f2a51982e289d888963f4f93b48c5f22.cloudfront.net (CloudFront)
+X-Amz-Cf-Pop: FRA60-P7
+X-Amz-Cf-Id: _uf6k-M6x0_aD6eoEdk9CxADYof7iuUazp7OTNjcTVd2mOFQmBgGZw==
+Age: 77463
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload

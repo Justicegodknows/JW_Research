@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -74,4 +75,4 @@ def parse_wol_html(html: str, url: str, language: str = "en") -> ParsedDoc:
 
 def stable_id(*parts: str) -> str:
     h = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-    return h
+    return str(uuid.UUID(hex=h[:32]))
