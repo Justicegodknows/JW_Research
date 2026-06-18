@@ -45,6 +45,38 @@ function buildSystemPrompt(contextBlock: string): string {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { messages: ChatMessage[] };
+    const backendUrl = (process.env.BACKEND_URL || "").trim();
+
+    // Optional production mode: forward chat traffic to an external backend
+    // (for example, a Cloudflare-routed backend) instead of running local RAG.
+    if (backendUrl) {
+      let shouldProxy = true;
+      try {
+        const incoming = new URL(req.url);
+        const configured = new URL(backendUrl);
+        if (incoming.origin === configured.origin) {
+          shouldProxy = false;
+        }
+      } catch {
+        shouldProxy = true;
+      }
+
+      if (shouldProxy) {
+        const target = backendUrl.replace(/\/$/, "") + "/api/chat";
+        const upstream = await fetch(target, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const headers = new Headers(upstream.headers);
+        return new Response(upstream.body, {
+          status: upstream.status,
+          statusText: upstream.statusText,
+          headers,
+        });
+      }
+    }
+
     const messages = body.messages || [];
 
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
