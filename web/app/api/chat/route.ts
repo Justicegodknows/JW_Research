@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as { messages: ChatMessage[] };
     const backendUrl = (process.env.BACKEND_URL || "").trim();
     const backendPath = (process.env.BACKEND_CHAT_PATH || "/api/chat").trim() || "/api/chat";
-    const allowLocalFallback = (process.env.BACKEND_ALLOW_LOCAL_FALLBACK || "false") === "true";
+    const allowLocalFallback = (process.env.BACKEND_ALLOW_LOCAL_FALLBACK || "true") === "true";
     const proxyHop = req.headers.get("x-jw-proxy-hop") === "1";
 
     // Optional production mode: forward chat traffic to an external backend
@@ -121,7 +121,8 @@ export async function POST(req: Request) {
           });
 
           if (!upstream.ok) {
-            if (!allowLocalFallback) {
+            const shouldForceLocalFallback = upstream.status === 404 || upstream.status === 405;
+            if (!allowLocalFallback && !shouldForceLocalFallback) {
               const headers = new Headers(upstream.headers);
               return new Response(upstream.body, {
                 status: upstream.status,
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
             const allow = upstream.headers.get("allow") || "";
             console.warn(
               "Proxy backend returned non-OK; falling back to local RAG.",
-              JSON.stringify({ status: upstream.status, allow })
+              JSON.stringify({ status: upstream.status, allow, forced: shouldForceLocalFallback })
             );
           } else {
             const headers = new Headers(upstream.headers);
