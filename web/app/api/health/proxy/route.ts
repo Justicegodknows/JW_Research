@@ -1,5 +1,19 @@
 export const runtime = "nodejs";
 
+const ALLOWED_METHODS = "GET, OPTIONS";
+
+export async function OPTIONS() {
+    return new Response(null, {
+        status: 204,
+        headers: {
+            Allow: ALLOWED_METHODS,
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": ALLOWED_METHODS,
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    });
+}
+
 function isTimeoutLikeError(err: unknown): boolean {
     if (!err) return false;
     if (err instanceof DOMException) {
@@ -27,7 +41,12 @@ export async function GET(req: Request) {
                 reachable: false,
                 reason: "BACKEND_URL is not set",
             },
-            { status: 400 }
+            {
+                status: 400,
+                headers: {
+                    Allow: ALLOWED_METHODS,
+                },
+            }
         );
     }
 
@@ -57,7 +76,12 @@ export async function GET(req: Request) {
                 allow,
                 elapsedMs,
             },
-            { status: 200 }
+            {
+                status: 200,
+                headers: {
+                    Allow: ALLOWED_METHODS,
+                },
+            }
         );
     } catch (err) {
         const elapsedMs = Date.now() - startedAt;
@@ -73,7 +97,12 @@ export async function GET(req: Request) {
                 elapsedMs,
                 detail: message,
             },
-            { status: timeout ? 504 : 502 }
+            {
+                status: timeout ? 504 : 502,
+                headers: {
+                    Allow: ALLOWED_METHODS,
+                },
+            }
         );
     }
 }

@@ -8,11 +8,37 @@ import { liveFetchAndIngest } from "@/lib/liveIngest";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const ALLOWED_METHODS = "POST, OPTIONS, GET";
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": ALLOWED_METHODS,
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+} as const;
+
+export async function GET() {
+  return Response.json(
+    {
+      ok: true,
+      route: "/api/chat",
+      message: "Use POST with a JSON body containing messages.",
+      allowedMethods: ["POST", "OPTIONS", "GET"],
+    },
+    {
+      status: 200,
+      headers: {
+        Allow: ALLOWED_METHODS,
+        ...CORS_HEADERS,
+      },
+    }
+  );
+}
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
     headers: {
-      Allow: "POST, OPTIONS",
+      Allow: ALLOWED_METHODS,
+      ...CORS_HEADERS,
     },
   });
 }
@@ -222,6 +248,10 @@ export async function POST(req: Request) {
 
     const response = result.toDataStreamResponse();
     response.headers.set("x-jw-sources", encodeURIComponent(JSON.stringify(sources)));
+    response.headers.set("Allow", ALLOWED_METHODS);
+    response.headers.set("Access-Control-Allow-Origin", CORS_HEADERS["Access-Control-Allow-Origin"]);
+    response.headers.set("Access-Control-Allow-Methods", CORS_HEADERS["Access-Control-Allow-Methods"]);
+    response.headers.set("Access-Control-Allow-Headers", CORS_HEADERS["Access-Control-Allow-Headers"]);
     return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -235,7 +265,13 @@ export async function POST(req: Request) {
           ? "Upstream service timeout. Verify NVIDIA_EMBED_URL/NVIDIA_EMBED_MODEL, QDRANT_URL, firewall allowlists, and timeout env vars."
           : "Verify NVIDIA_EMBED_URL, NVIDIA_EMBED_MODEL, QDRANT_URL, and related service availability.",
       },
-      { status: timeout ? 504 : 500 }
+      {
+        status: timeout ? 504 : 500,
+        headers: {
+          Allow: ALLOWED_METHODS,
+          ...CORS_HEADERS,
+        },
+      }
     );
   }
 }
