@@ -61,7 +61,12 @@ export async function qdrantSearch(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error("Qdrant search failed: " + res.status + " " + body);
+    const trimmed = body.trimStart();
+    const isHtml = trimmed.startsWith("<!") || trimmed.toLowerCase().startsWith("<html");
+    const detail = isHtml
+      ? `gateway/proxy error — the Qdrant host is unreachable (endpoint: ${endpoint})`
+      : body.slice(0, 300);
+    throw new Error(`Qdrant search failed with status ${res.status}: ${detail}`);
   }
 
   const json = (await res.json()) as {
