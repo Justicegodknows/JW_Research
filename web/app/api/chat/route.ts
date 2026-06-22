@@ -341,8 +341,20 @@ export async function POST(req: Request) {
       maxRetries: 0,
     });
 
+    const isWebSource = (c: { url: string; source?: string }) => {
+      const url = String(c.url || "");
+      const isWebUrl =
+        url.startsWith("https://www.jw.org") ||
+        url.startsWith("https://jw.org") ||
+        url.startsWith("https://wol.jw.org") ||
+        url.startsWith("https://www.wol.jw.org");
+      return isWebUrl && !url.startsWith("file://") && (c.source || "web") !== "book";
+    };
+
     // Expose sources to the client via a custom header carrying JSON.
-    const sources = ranked.map((c, i) => ({
+    const sourcesRanked = ranked.filter(isWebSource);
+    const sourcesFallback = raw.filter(isWebSource).slice(0, 6);
+    const sources = (sourcesRanked.length > 0 ? sourcesRanked : sourcesFallback).map((c, i) => ({
       n: i + 1,
       title: c.title,
       publication: c.publication,
