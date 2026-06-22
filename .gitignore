@@ -9,8 +9,15 @@ venv/
 
 # Data (large, generated)
 data/raw/
+data/httpcache/
 data/chunks/
 data/embeddings/
+crawler/data/raw/
+crawler/.scrapy/
+indexer/data/
+web/qdrant_storage/
+web/test-results/
+web/playwright-report/
 
 # OS / IDE
 .DS_Store
