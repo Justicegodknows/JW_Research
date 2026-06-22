@@ -61,7 +61,6 @@ class WolSpider(scrapy.Spider):
                 html=html,
                 content_hash=hashlib.sha256(html.encode("utf-8")).hexdigest(),
             )
-            return
 
         # Follow internal links that look like English content.
         for href in response.css("a::attr(href)").getall():
