@@ -25,3 +25,5 @@ web/playwright-report/
 .vscode/
 .vercel
 .env*
+logs/book_ingest.log
+logs/books_download_ingest_20260622_190618.log
