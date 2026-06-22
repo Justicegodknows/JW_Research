@@ -26,11 +26,6 @@ class WolSpider(scrapy.Spider):
         "https://wol.jw.org/en/wol/library/r1/lp-e/all-publications",
     ]
 
-    custom_settings = {
-        # Keep recursion under control; these sites are huge.
-        "DEPTH_LIMIT": 6,
-    }
-
     def __init__(self, since=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # For future use; currently not applied (no reliable last-modified across pages).

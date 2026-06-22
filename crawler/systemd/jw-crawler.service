@@ -8,7 +8,7 @@ Type=oneshot
 WorkingDirectory=%h/Documents/JW_Research
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-%h/.config/jw-research/crawler.env
-ExecStart=%h/Documents/JW_Research/crawler/.venv/bin/python -m crawler.run --spider ${CRAWLER_SPIDER:-wol} --limit ${CRAWLER_LIMIT:-100}
+ExecStart=/bin/bash -lc '%h/Documents/JW_Research/crawler/.venv/bin/python -m crawler.run --spider "${CRAWLER_SPIDER:-wol}" ${CRAWLER_LIMIT:+--limit "${CRAWLER_LIMIT}"}'
 StandardOutput=journal
 StandardError=journal
 

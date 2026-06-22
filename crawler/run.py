@@ -41,14 +41,14 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Limit the number of pages to crawl",
-        default=100,
+        help="Limit the number of items to crawl (0 or unset means no limit)",
+        default=None,
     )
     args = parser.parse_args()
 
     settings = get_project_settings()
 
-    if args.limit:
+    if args.limit is not None and args.limit > 0:
         settings.set("CLOSESPIDER_ITEMCOUNT", args.limit)
 
     process = CrawlerProcess(settings)
