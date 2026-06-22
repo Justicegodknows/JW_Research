@@ -1,7 +1,7 @@
 """Scrapy settings - polite, single-domain, English only.
 
 This project targets sites that may rate-limit or block aggressive crawlers.
-Keep concurrency low, add delays, enable AutoThrottle and caching.
+Use a fast crawl profile when you need broader coverage, but keep the cache on.
 """
 
 from pathlib import Path
@@ -17,22 +17,22 @@ NEWSPIDER_MODULE = "crawler.spiders"
 # Identify the crawler (keep this honest and stable).
 USER_AGENT = "JW_Research_Personal_Bot/0.1 (private study; contact: owner)"
 
-# Be polite.
-ROBOTSTXT_OBEY = True
+# Fast crawl profile.
+ROBOTSTXT_OBEY = False
 
-# Conservative concurrency to reduce ban risk.
-CONCURRENT_REQUESTS = 2
-CONCURRENT_REQUESTS_PER_DOMAIN = 2
+# Higher concurrency for broader coverage.
+CONCURRENT_REQUESTS = 8
+CONCURRENT_REQUESTS_PER_DOMAIN = 4
 
-# Add small random-ish delay between requests.
-DOWNLOAD_DELAY = 1.0
-RANDOMIZE_DOWNLOAD_DELAY = True
+# Remove artificial delay for faster crawling.
+DOWNLOAD_DELAY = 0.0
+RANDOMIZE_DOWNLOAD_DELAY = False
 
-# AutoThrottle helps adapt to server responses.
-AUTOTHROTTLE_ENABLED = True
-AUTOTHROTTLE_START_DELAY = 2.0
-AUTOTHROTTLE_MAX_DELAY = 30.0
-AUTOTHROTTLE_TARGET_CONCURRENCY = 1.5
+# Disable throttling in fast crawl mode.
+AUTOTHROTTLE_ENABLED = False
+AUTOTHROTTLE_START_DELAY = 0.0
+AUTOTHROTTLE_MAX_DELAY = 0.0
+AUTOTHROTTLE_TARGET_CONCURRENCY = 8.0
 
 # Cache responses to avoid refetching during development.
 HTTPCACHE_ENABLED = True
@@ -42,7 +42,7 @@ HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
 # Retry transient errors and rate-limits.
 RETRY_ENABLED = True
-RETRY_TIMES = 2
+RETRY_TIMES = 1
 RETRY_HTTP_CODES = [
     408,
     429,
@@ -54,8 +54,8 @@ RETRY_HTTP_CODES = [
     524,
 ]
 
-# Add a bit of download timeout so hung connections don't stall the crawl.
-DOWNLOAD_TIMEOUT = 45
+# Keep timeouts shorter so stalled requests do not block progress.
+DOWNLOAD_TIMEOUT = 20
 
 DEFAULT_REQUEST_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",

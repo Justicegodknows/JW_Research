@@ -23,6 +23,8 @@ class WolSpider(scrapy.Spider):
     start_urls = [
         "https://www.jw.org/en/",
         "https://www.jw.org/en/library/",
+        "https://www.jw.org/en/bible-teachings/",
+        "https://www.jw.org/en/library/bible/",
         "https://wol.jw.org/en/wol/library/r1/lp-e/all-publications",
     ]
 
@@ -40,8 +42,10 @@ class WolSpider(scrapy.Spider):
         yield from self.parse_any(response)
 
     def parse_any(self, response):
-        # Save article-like pages.
-        if response.css("#article, article, .article").get():
+        # Save any substantial English text page, not just pages with explicit article markup.
+        main = response.css("article, main, #article, .article, body").get()
+        text = response.css("article, main, #article, .article, body").xpath("normalize-space(string())").get(default="").strip()
+        if main and len(text) >= 200:
             html = response.text
             yield JwPage(
                 url=response.url,

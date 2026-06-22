@@ -15,13 +15,13 @@ if [[ ! -f "${USER_CONFIG_DIR}/crawler.env" ]]; then
   cat > "${USER_CONFIG_DIR}/crawler.env" <<'EOF'
 # Optional overrides for jw-crawler.service
 # CRAWLER_SPIDER=wol
-# CRAWLER_LIMIT=5000
+# CRAWLER_LIMIT=20000
 EOF
 fi
 
 # If user kept the old default in place, bump it to the broader crawl default.
 if [[ -f "${USER_CONFIG_DIR}/crawler.env" ]]; then
-  sed -i 's/^CRAWLER_LIMIT=100$/CRAWLER_LIMIT=5000/' "${USER_CONFIG_DIR}/crawler.env" || true
+  sed -i 's/^CRAWLER_LIMIT=100$/CRAWLER_LIMIT=20000/' "${USER_CONFIG_DIR}/crawler.env" || true
 fi
 
 systemctl --user daemon-reload

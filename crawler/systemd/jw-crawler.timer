@@ -2,7 +2,7 @@
 Description=Run JW Research crawler on a schedule
 
 [Timer]
-OnCalendar=*:0/20
+OnCalendar=*:0/5
 Persistent=true
 RandomizedDelaySec=5m
 Unit=jw-crawler.service
