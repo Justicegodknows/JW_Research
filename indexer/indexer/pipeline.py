@@ -164,7 +164,7 @@ def main() -> None:
     ap.add_argument(
         "--raw-dir",
         type=str,
-        default="../crawler/data/raw",
+        default="../data/raw",
         help="Directory with crawler raw *.json files",
     )
     ap.add_argument("--state", type=str, default="data/indexer_state.json")

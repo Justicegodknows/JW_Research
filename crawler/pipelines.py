@@ -5,9 +5,12 @@ import json
 from pathlib import Path
 
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
 class RawHtmlPipeline:
     def open_spider(self, spider):
-        self.out_dir = Path("data/raw")
+        self.out_dir = ROOT_DIR / "data" / "raw"
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
     def process_item(self, item, spider):

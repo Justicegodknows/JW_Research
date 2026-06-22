@@ -15,6 +15,8 @@ from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 
 from crawler.spiders.wol_spider import WolSpider
+import os
+os.environ.setdefault("SCRAPY_SETTINGS_MODULE", "crawler.settings")
 
 
 SPIDERS = {
