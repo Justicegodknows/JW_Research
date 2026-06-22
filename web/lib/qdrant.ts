@@ -5,6 +5,8 @@ export type Chunk = {
   title: string;
   publication: string;
   url: string;
+  source?: string;
+  sourceFile?: string;
   vector: number[];
 };
 
@@ -93,6 +95,8 @@ export async function qdrantSearch(
       title: String(payload.title || "Untitled"),
       publication: String(payload.publication || payload.pub || ""),
       url: String(payload.url || ""),
+      source: String(payload.source || "web"),
+      sourceFile: String(payload.source_file || ""),
       vector: vec,
     };
   });

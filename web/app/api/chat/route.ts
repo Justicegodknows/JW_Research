@@ -48,6 +48,79 @@ type ChatMessage = {
   content: string;
 };
 
+type SourceKind = "book" | "web";
+
+function getSourceKind(source: string): SourceKind {
+  return source === "book" ? "book" : "web";
+}
+
+function interleaveBySource<T>(books: T[], webs: T[], target: number): T[] {
+  const out: T[] = [];
+  let bi = 0;
+  let wi = 0;
+
+  while (out.length < target && (bi < books.length || wi < webs.length)) {
+    if (bi < books.length) {
+      out.push(books[bi++]);
+      if (out.length >= target) break;
+    }
+    if (wi < webs.length) {
+      out.push(webs[wi++]);
+    }
+  }
+
+  return out;
+}
+
+function buildContextEntries(
+  ranked: Array<{
+    title: string;
+    publication: string;
+    url: string;
+    text: string;
+    source?: string;
+  }>,
+  budgetChars: number
+) {
+  const entries: string[] = [];
+  const keptIndices: number[] = [];
+  let used = 0;
+
+  for (let i = 0; i < ranked.length; i++) {
+    const c = ranked[i];
+    const sourceLabel = getSourceKind(c.source || "web");
+    const header =
+      "[" +
+      (entries.length + 1) +
+      "] " +
+      c.title +
+      (c.publication ? " - " + c.publication : "") +
+      (c.url ? " (" + c.url + ")" : "") +
+      " {source=" +
+      sourceLabel +
+      "}";
+
+    const remaining = Math.max(0, budgetChars - used);
+    if (remaining <= 0) break;
+
+    const separatorCost = entries.length > 0 ? "\n\n---\n\n".length : 0;
+    const maxText = Math.max(0, remaining - separatorCost - header.length - 1);
+    if (maxText <= 0) break;
+
+    const body = c.text.slice(0, maxText);
+    if (!body.trim()) continue;
+
+    entries.push(header + "\n" + body);
+    keptIndices.push(i);
+    used += separatorCost + header.length + 1 + body.length;
+  }
+
+  return {
+    contextBlock: entries.join("\n\n---\n\n"),
+    keptIndices,
+  };
+}
+
 function extractJwUrls(text: string): string[] {
   const urls: string[] = [];
   const re = /(https?:\/\/[^\s)\]]+)/g;
@@ -62,7 +135,7 @@ function buildSystemPrompt(contextBlock: string): string {
   return (
     "You are JW Research, a careful retrieval-augmented assistant.\n\n" +
     "Mission:\n" +
-    "Help users answer questions using ONLY content indexed from this project\u2019s JW-only crawler (jw.org and wol.jw.org).\n\n" +
+    "Help users answer questions using ONLY content indexed in this project from JW sources (jw.org and wol.jw.org), including both scraped pages and downloaded publications.\n\n" +
     "Hard boundaries (non-negotiable):\n" +
     "1) Use ONLY the numbered context below. Do not use outside knowledge.\n" +
     "2) Do not browse the web. Do not claim you fetched pages live.\n" +
@@ -70,7 +143,7 @@ function buildSystemPrompt(contextBlock: string): string {
     "4) Cite every factual claim inline using bracketed numbers like [1], [2] matching the context items.\n" +
     "5) Do not fabricate quotations, titles, publications, dates, URLs, or references.\n\n" +
     "Answer style:\n" +
-    "- Be concise, neutral, and accurate.\n" +
+    "- Be concise, neutral, accurate, and insightful.\n" +
     "- Prefer direct quotations when it improves precision, in double quotes, with a citation.\n\n" +
     "Context:\n" +
     contextBlock
@@ -194,23 +267,53 @@ export async function POST(req: Request) {
     // 1. Embed the latest user question.
     const qvec = await embedQuery(lastUser.content);
 
-    // 2. Top-k=8 from Qdrant, then MMR re-rank to 6.
-    const raw = await qdrantSearch(qvec, 8);
-    const ranked = mmrRerank(qvec, raw, 6, 0.6);
+    // 2. Deep retrieval + source-aware blend (books + scraped pages).
+    const retrievalTopK = Number(process.env.JW_RETRIEVAL_TOP_K || "120");
+    const finalK = Number(process.env.JW_RETRIEVAL_FINAL_K || "12");
+    const lambda = Number(process.env.JW_RETRIEVAL_MMR_LAMBDA || "0.58");
 
-    // 3. Build a numbered context block and the system prompt.
-    const contextBlock = ranked
-      .map((c, i) => {
-        const header =
-          "[" +
-          (i + 1) +
-          "] " +
-          c.title +
-          (c.publication ? " - " + c.publication : "") +
-          (c.url ? " (" + c.url + ")" : "");
-        return header + "\n" + c.text;
-      })
-      .join("\n\n---\n\n");
+    const raw = await qdrantSearch(qvec, retrievalTopK);
+    const bookCandidates = raw.filter((c) => getSourceKind(c.source || "web") === "book");
+    const webCandidates = raw.filter((c) => getSourceKind(c.source || "web") === "web");
+
+    const bookQuota = Math.floor(finalK / 2);
+    const webQuota = finalK - bookQuota;
+
+    const bookRanked = mmrRerank(
+      qvec,
+      bookCandidates,
+      Math.min(bookCandidates.length, bookQuota * 3),
+      lambda
+    );
+    const webRanked = mmrRerank(
+      qvec,
+      webCandidates,
+      Math.min(webCandidates.length, webQuota * 3),
+      lambda
+    );
+
+    let ranked = interleaveBySource(
+      bookRanked.slice(0, bookQuota),
+      webRanked.slice(0, webQuota),
+      finalK
+    );
+
+    if (ranked.length < finalK) {
+      const fallback = mmrRerank(qvec, raw, finalK * 2, lambda);
+      const seen = new Set(ranked.map((c) => String(c.id)));
+      for (const c of fallback) {
+        if (ranked.length >= finalK) break;
+        const key = String(c.id);
+        if (seen.has(key)) continue;
+        ranked.push(c);
+        seen.add(key);
+      }
+    }
+
+    // 3. Build prompt context with explicit budget (default 5000 chars).
+    const contextBudgetChars = Number(process.env.JW_CONTEXT_BUDGET_CHARS || "5000");
+    const { contextBlock, keptIndices } = buildContextEntries(ranked, contextBudgetChars);
+    ranked = keptIndices.map((i) => ranked[i]);
 
     const system = buildSystemPrompt(contextBlock);
 
@@ -229,12 +332,12 @@ export async function POST(req: Request) {
       model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
       system,
       messages: coreMessages,
-      temperature: 0.6,
-      topP: 0.95,
-      topK: 20,
+      temperature: Number(process.env.JW_CHAT_TEMPERATURE || "1.25"),
+      topP: Number(process.env.JW_CHAT_TOP_P || "0.98"),
+      topK: Number(process.env.JW_CHAT_TOP_K || "60"),
       maxTokens: 16384,
-      presencePenalty: 0,
-      frequencyPenalty: 1,
+      presencePenalty: Number(process.env.JW_CHAT_PRESENCE_PENALTY || "0.6"),
+      frequencyPenalty: Number(process.env.JW_CHAT_FREQUENCY_PENALTY || "0.3"),
       maxRetries: 0,
     });
 
@@ -244,6 +347,8 @@ export async function POST(req: Request) {
       title: c.title,
       publication: c.publication,
       url: c.url,
+      source: c.source,
+      sourceFile: c.sourceFile,
       score: c.score,
     }));
 
