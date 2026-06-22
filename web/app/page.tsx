@@ -10,6 +10,50 @@ import { cn } from "@/lib/utils";
 
 type SourcesByMessageId = Record<string, Source[]>;
 
+// Parse citations like [1], [2] and convert to clickable spans
+function parseContentWithCitations(
+  content: string,
+  sources: Source[] | undefined
+): React.ReactNode {
+  if (!sources || sources.length === 0) {
+    return content;
+  }
+
+  // Create a map of citation number to source URL
+  const citationMap = new Map<number, string>();
+  sources.forEach((s) => {
+    if (s.n && s.url) {
+      citationMap.set(s.n, s.url);
+    }
+  });
+
+  // Regex to match [1], [2], etc.
+  const parts = content.split(/(\[\d+\])/g);
+
+  return parts.map((part, idx) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      const url = citationMap.get(num);
+      if (url) {
+        return (
+          <a
+            key={idx}
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline mx-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        );
+      }
+    }
+    return part;
+  });
+}
+
 export default function ChatPage() {
   const [sourcesByMsg, setSourcesByMsg] = React.useState<SourcesByMessageId>({});
   const [isLoading, setIsLoading] = React.useState(false);
@@ -155,13 +199,15 @@ export default function ChatPage() {
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-5 py-4 text-sm leading-relaxed shadow-sm",
+                      "max-w-[85%] sm:max-w-[85%] w-full rounded-2xl px-4 sm:px-5 py-3 sm:py-4 text-sm leading-relaxed shadow-sm",
                       isUser
                         ? "bg-primary text-primary-foreground"
                         : "bg-card text-card-foreground border border-border/50"
                     )}
                   >
-                    <div className="whitespace-pre-wrap">{text}</div>
+                    <div className="whitespace-pre-wrap">
+                      {isUser ? text : parseContentWithCitations(text, srcs)}
+                    </div>
                     {!isUser && srcs && <SourcesPanel sources={srcs} />}
                   </div>
                 </li>
@@ -210,8 +256,8 @@ export default function ChatPage() {
               onChange={handleInputChange}
               onKeyDown={onKeyDown}
               placeholder="Ask anything about JW Library content..."
-              rows={2}
-              className="flex-1 min-h-[60px] resize-none"
+              rows={1}
+              className="flex-1 min-h-[44px] sm:min-h-[60px] resize-none text-base"
               disabled={isLoading}
             />
             {isLoading ? (
@@ -235,10 +281,13 @@ export default function ChatPage() {
               </Button>
             )}
           </form>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          <p className="mt-2 hidden sm:block text-center text-[11px] text-muted-foreground">
             Press <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Enter</kbd> to send,{' '}
             <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Shift+Enter</kbd> for new line. Answers are grounded
             with sources.
+          </p>
+          <p className="mt-2 block sm:hidden text-center text-[11px] text-muted-foreground">
+            Tap send button or press Enter. Answers are grounded with sources.
           </p>
         </div>
       </div>
