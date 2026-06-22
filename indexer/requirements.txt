@@ -4,3 +4,5 @@ beautifulsoup4==4.12.3
 lxml==5.2.2
 qdrant-client==1.11.3
 tqdm==4.66.5
+pymupdf==1.24.1
+ebooklib==0.18.0
