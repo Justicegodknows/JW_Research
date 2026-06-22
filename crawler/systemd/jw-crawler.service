@@ -1,0 +1,16 @@
+[Unit]
+Description=JW Research scheduled crawler run
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/JW_Research
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/jw-research/crawler.env
+ExecStart=%h/Documents/JW_Research/crawler/.venv/bin/python -m crawler.run --spider ${CRAWLER_SPIDER:-wol} --limit ${CRAWLER_LIMIT:-100}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
