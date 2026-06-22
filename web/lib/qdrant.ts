@@ -18,7 +18,8 @@ function isLocalUrl(url: string): boolean {
 
 export async function qdrantSearch(
   vector: number[],
-  topK: number
+  topK: number,
+  filter?: Record<string, unknown>
 ): Promise<Chunk[]> {
   const base = process.env.QDRANT_URL;
   const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "5000");
@@ -47,6 +48,7 @@ export async function qdrantSearch(
       body: JSON.stringify({
         vector,
         limit: topK,
+        filter,
         with_payload: true,
         with_vector: true,
       }),

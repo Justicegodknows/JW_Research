@@ -54,18 +54,18 @@ function getSourceKind(source: string): SourceKind {
   return source === "book" ? "book" : "web";
 }
 
-function interleaveBySource<T>(books: T[], webs: T[], target: number): T[] {
+function interleaveBySource<T>(webs: T[], books: T[], target: number): T[] {
   const out: T[] = [];
-  let bi = 0;
   let wi = 0;
+  let bi = 0;
 
-  while (out.length < target && (bi < books.length || wi < webs.length)) {
-    if (bi < books.length) {
-      out.push(books[bi++]);
-      if (out.length >= target) break;
-    }
+  while (out.length < target && (wi < webs.length || bi < books.length)) {
     if (wi < webs.length) {
       out.push(webs[wi++]);
+      if (out.length >= target) break;
+    }
+    if (bi < books.length) {
+      out.push(books[bi++]);
     }
   }
 
@@ -267,39 +267,43 @@ export async function POST(req: Request) {
     // 1. Embed the latest user question.
     const qvec = await embedQuery(lastUser.content);
 
-    // 2. Deep retrieval + source-aware blend (books + scraped pages).
-    const retrievalTopK = Number(process.env.JW_RETRIEVAL_TOP_K || "120");
-    const finalK = Number(process.env.JW_RETRIEVAL_FINAL_K || "12");
+    // 2. Deep retrieval + source-aware blend (web first, books as support).
+    const retrievalTopK = Number(process.env.JW_RETRIEVAL_TOP_K || "500");
+    const finalK = Number(process.env.JW_RETRIEVAL_FINAL_K || "50");
     const lambda = Number(process.env.JW_RETRIEVAL_MMR_LAMBDA || "0.58");
 
     const raw = await qdrantSearch(qvec, retrievalTopK);
-    const bookCandidates = raw.filter((c) => getSourceKind(c.source || "web") === "book");
-    const webCandidates = raw.filter((c) => getSourceKind(c.source || "web") === "web");
-
-    const bookQuota = Math.floor(finalK / 2);
-    const webQuota = finalK - bookQuota;
-
-    const bookRanked = mmrRerank(
-      qvec,
-      bookCandidates,
-      Math.min(bookCandidates.length, bookQuota * 3),
-      lambda
+    const webCandidates = raw.filter(
+      (c) => !String(c.sourceFile || "").trim() && String(c.url || "").startsWith("http")
     );
+    const bookCandidates = raw.filter(
+      (c) => String(c.sourceFile || "").trim() || String(c.url || "").startsWith("file://")
+    );
+
+    const webQuota = Math.max(1, Math.round(finalK * 0.9));
+    const bookQuota = Math.max(0, finalK - webQuota);
+
     const webRanked = mmrRerank(
       qvec,
       webCandidates,
       Math.min(webCandidates.length, webQuota * 3),
       lambda
     );
+    const bookRanked = mmrRerank(
+      qvec,
+      bookCandidates,
+      Math.min(bookCandidates.length, Math.max(1, bookQuota * 3)),
+      lambda
+    );
 
     let ranked = interleaveBySource(
-      bookRanked.slice(0, bookQuota),
       webRanked.slice(0, webQuota),
+      bookRanked.slice(0, bookQuota),
       finalK
     );
 
     if (ranked.length < finalK) {
-      const fallback = mmrRerank(qvec, raw, finalK * 2, lambda);
+      const fallback = mmrRerank(qvec, raw, finalK * 3, lambda);
       const seen = new Set(ranked.map((c) => String(c.id)));
       for (const c of fallback) {
         if (ranked.length >= finalK) break;
@@ -341,14 +345,14 @@ export async function POST(req: Request) {
       maxRetries: 0,
     });
 
-    const isWebSource = (c: { url: string; source?: string }) => {
+    const isWebSource = (c: { url: string; sourceFile?: string }) => {
       const url = String(c.url || "");
       const isWebUrl =
         url.startsWith("https://www.jw.org") ||
         url.startsWith("https://jw.org") ||
         url.startsWith("https://wol.jw.org") ||
         url.startsWith("https://www.wol.jw.org");
-      return isWebUrl && !url.startsWith("file://") && (c.source || "web") !== "book";
+      return isWebUrl && !url.startsWith("file://") && !String(c.sourceFile || "").trim();
     };
 
     // Expose sources to the client via a custom header carrying JSON.
