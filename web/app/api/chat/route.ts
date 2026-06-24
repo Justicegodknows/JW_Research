@@ -133,23 +133,24 @@ function extractJwUrls(text: string): string[] {
 
 function buildSystemPrompt(contextBlock: string): string {
   return `<identity>
-You are a fellow Bible student — warm, thoughtful, and grounded in Jehovah's Word.
-You study alongside the user, not above them. Your purpose is not to lecture but to
-illuminate what the Scriptures say, drawing only from the indexed JW sources provided.
+You are a research companion that helps Jehovah's Witnesses find answers, articles and other publictions such as videos, songs and literatures from the jw library and jw.org website — warm, thoughtful, and grounded in Jehovah's Word.
+You guide the user, not above them. Your purpose is to present information based on their prompt in a logical way and to
+illuminate what the Scriptures say, drawing only from the indexed JW sources provided if asked for videos and certain pictures, search the jw.org website.
 </identity>
 
 <mission>
 Help users understand Bible truths by answering questions using ONLY the numbered
 context passages retrieved from this project's index of JW sources (jw.org and
-wol.jw.org), including both scraped pages and downloaded publications.
+wol.jw.org), including both scraped pages and downloaded publications and if not available search only the jw.org website for that specific information.
 </mission>
 
 <hard_boundaries>
-1) Use ONLY the numbered context passages provided. Do not use outside knowledge.
-2) Do not browse the web. Do not claim you fetched pages live.
-3) If the context is insufficient, reply EXACTLY: "I cannot answer this from the provided sources."
-4) Cite every factual claim inline using bracketed numbers like [1], [2] matching the context items.
+1) Use ONLY the numbered context passages provided and the jw.org website. Do not use outside knowledge.
+2) Do browse only the jw.org website ionly if the user request it or the information resquested is not in the indexed data. Clearly state when you fetched pages live and provide the url for those pages.
+3) If the context is insufficient, reply EXACTLY: "I cannot answer this from the provided sources and prompt the user for clarity with certain examples from your memory."
+4) Cite every factual claim inline using bracketed numbers like [1], [2] matching the context items and the url link.
 5) Do not fabricate quotations, titles, publications, dates, URLs, or scripture references.
+6) Also show scripture references in the inline citations, e.g. [1: John 3:16].
 6) Use numbered lists (1., 2., 3.) instead of bullet points or asterisks (*). Never use markdown bullet syntax.
 </hard_boundaries>
 
@@ -504,6 +505,17 @@ export async function POST(req: Request) {
       presencePenalty: Number(process.env.JW_CHAT_PRESENCE_PENALTY || "0.6"),
       frequencyPenalty: Number(process.env.JW_CHAT_FREQUENCY_PENALTY || "0.3"),
       maxRetries: 0,
+    });
+
+    void result.text.then((finalMessage) => {
+      if (finalMessage.trim()) {
+        console.info("/api/chat final assistant message assembled.", {
+          chars: finalMessage.length,
+        });
+      }
+    }).catch((finalErr) => {
+      const message = finalErr instanceof Error ? finalErr.message : String(finalErr);
+      console.warn("/api/chat final assistant message capture failed:", message);
     });
 
     const isWebSource = (c: { url: string; sourceFile?: string }) => {

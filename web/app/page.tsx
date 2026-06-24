@@ -59,6 +59,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [uiError, setUiError] = React.useState<string | null>(null);
   const [lastSubmittedInput, setLastSubmittedInput] = React.useState("");
+  const finalAssistantMessageRef = React.useRef("");
   const pendingSourcesRef = React.useRef<Source[] | null>(null);
 
   const {
@@ -70,6 +71,7 @@ export default function ChatPage() {
     stop
   } = useChat({
     api: "/api/chat",
+    streamProtocol: "data",
     onResponse(response) {
       if (!response.ok) {
         setIsLoading(false);
@@ -92,6 +94,7 @@ export default function ChatPage() {
     },
     onFinish(message) {
       setIsLoading(false);
+      finalAssistantMessageRef.current = message.content;
       if (pendingSourcesRef.current) {
         const s = pendingSourcesRef.current;
         setSourcesByMsg((prev) => ({ ...prev, [message.id]: s }));
