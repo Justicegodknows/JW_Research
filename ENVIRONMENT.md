@@ -13,7 +13,7 @@ This document lists all environment variables used in the JW Research retrieval 
 | `QDRANT_COLLECTION` | No | `jw_research` | Qdrant collection name |
 | `QDRANT_API_KEY` | No | - | Qdrant API key |
 | `NVIDIA_LLM_URL` | No | `https://integrate.api.nvidia.com/v1` | LLM API endpoint |
-| `NVIDIA_MODEL` | No | `qwen/qwen3.5-397b-a17b` | LLM model name |
+| `NVIDIA_MODEL` | No | `jw-llm` | LLM model name |
 | `JW_LIVE_INGEST_ENABLED` | No | `true` | Enable live URL ingestion |
 | `JW_LIVE_INGEST_MAX_URLS` | No | `2` | Max URLs to ingest per request |
 | `JW_LIVE_INGEST_MAX_CHUNKS` | No | `6` | Max chunks per ingested URL |
@@ -67,7 +67,7 @@ The pipeline uses these endpoint patterns:
 export NVIDIA_API_KEY="your-key"
 export QDRANT_URL="http://localhost:6333"
 export NVIDIA_EMBED_URL="http://localhost:8001"
-export NVIDIA_LLM_URL="http://localhost:8000"
+export NVIDIA_LLM_URL="http://localhost:8000/v1"
 ```
 
 ### Production (Vercel) with Cloudflare Tunnel

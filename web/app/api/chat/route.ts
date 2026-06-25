@@ -495,7 +495,7 @@ export async function POST(req: Request) {
     }));
 
     const result = streamText({
-      model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
+      model: nvidia(process.env.NVIDIA_MODEL || "jw-llm"),
       system,
       messages: coreMessages,
       temperature: Number(process.env.JW_CHAT_TEMPERATURE || "1.25"),
