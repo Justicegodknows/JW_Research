@@ -541,7 +541,16 @@ export async function POST(req: Request) {
       score: c.score,
     }));
 
-    const response = result.toDataStreamResponse();
+    const response = result.toDataStreamResponse({
+      getErrorMessage: (error) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        const timeout = isTimeoutLikeError(error);
+        console.error("/api/chat stream error:", detail, error);
+        return timeout
+          ? "Upstream LLM timed out. Verify NVIDIA_LLM_URL/NVIDIA_MODEL and network reachability."
+          : `LLM stream failed: ${detail}`;
+      },
+    });
     response.headers.set("x-jw-sources", encodeURIComponent(JSON.stringify(sources)));
     response.headers.set("Allow", ALLOWED_METHODS);
     response.headers.set("Access-Control-Allow-Origin", CORS_HEADERS["Access-Control-Allow-Origin"]);
