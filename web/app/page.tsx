@@ -5,12 +5,13 @@ import { useChat } from "@ai-sdk/react";
 import { Send, Loader2, BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { CitationMarker } from "@/components/citation-marker";
 import { SourcesPanel, type Source } from "@/components/sources-panel";
 import { cn } from "@/lib/utils";
 
 type SourcesByMessageId = Record<string, Source[]>;
 
-// Parse citations like [1], [2] and convert to clickable spans
+// Parse citations like [1], [2] and convert to interactive markers.
 function parseContentWithCitations(
   content: string,
   sources: Source[] | undefined
@@ -19,11 +20,10 @@ function parseContentWithCitations(
     return content;
   }
 
-  // Create a map of citation number to source URL
-  const citationMap = new Map<number, string>();
+  const citationMap = new Map<number, Source>();
   sources.forEach((s) => {
     if (s.n && s.url) {
-      citationMap.set(s.n, s.url);
+      citationMap.set(s.n, s);
     }
   });
 
@@ -34,20 +34,9 @@ function parseContentWithCitations(
     const match = part.match(/^\[(\d+)\]$/);
     if (match) {
       const num = parseInt(match[1], 10);
-      const url = citationMap.get(num);
-      if (url) {
-        return (
-          <a
-            key={idx}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-accent hover:underline mx-0.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
-        );
+      const source = citationMap.get(num);
+      if (source) {
+        return <CitationMarker key={idx} markerText={part} source={source} />;
       }
     }
     return part;
