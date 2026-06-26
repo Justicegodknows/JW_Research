@@ -23,6 +23,10 @@ cd infra
 docker compose -f docker-compose.local.yml --env-file .env.local up --build
 ```
 
+The local env file also supports the chat fallback model settings used by the web app:
+`NVIDIA_USE_FALLBACK_MODEL`, `NVIDIA_FALLBACK_MODEL`,
+`NVIDIA_FALLBACK_ENABLE_THINKING`, and `NVIDIA_FALLBACK_REASONING_BUDGET`.
+
 3) Open:
 - http://localhost:3000
 

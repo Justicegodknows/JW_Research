@@ -14,6 +14,10 @@ This document lists all environment variables used in the JW Research retrieval 
 | `QDRANT_API_KEY` | No | - | Qdrant API key |
 | `NVIDIA_LLM_URL` | No | `https://integrate.api.nvidia.com/v1` | LLM API endpoint |
 | `NVIDIA_MODEL` | No | `qwen/qwen3.5-397b-a17b` | LLM model name |
+| `NVIDIA_USE_FALLBACK_MODEL` | No | `false` | Switch chat to the fallback model |
+| `NVIDIA_FALLBACK_MODEL` | No | `nvidia/nemotron-3-ultra-550b-a55b` | Fallback chat model name |
+| `NVIDIA_FALLBACK_ENABLE_THINKING` | No | `true` | Enable Nemotron thinking template kwargs |
+| `NVIDIA_FALLBACK_REASONING_BUDGET` | No | `16384` | Nemotron reasoning budget |
 | `JW_LIVE_INGEST_ENABLED` | No | `true` | Enable live URL ingestion |
 | `JW_LIVE_INGEST_MAX_URLS` | No | `2` | Max URLs to ingest per request |
 | `JW_LIVE_INGEST_MAX_CHUNKS` | No | `6` | Max chunks per ingested URL |
@@ -77,6 +81,8 @@ NVIDIA_API_KEY=<your-nvidia-api-key>
 QDRANT_URL=https://qdrant.theocracy.me
 NVIDIA_LLM_URL=https://llm.theocracy.me
 NVIDIA_EMBED_URL=https://embed.theocracy.me
+NVIDIA_USE_FALLBACK_MODEL=true
+NVIDIA_FALLBACK_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 ```
 
 ### DGX Server (Docker Compose)

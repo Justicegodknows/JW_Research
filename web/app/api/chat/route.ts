@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { streamText, type CoreMessage } from "ai";
+import { experimental_wrapLanguageModel, streamText, type CoreMessage } from "ai";
 import { buildPromptArtifacts, type ChatMessage } from "@/lib/prompt-assembly";
 
 export const runtime = "nodejs";
@@ -53,6 +53,51 @@ function isTimeoutLikeError(err: unknown): boolean {
     lower.includes("abort") ||
     lower.includes("aborted")
   );
+}
+
+function readBooleanEnv(name: string, defaultValue = false): boolean {
+  const rawValue = (process.env[name] || "").trim().toLowerCase();
+  if (!rawValue) {
+    return defaultValue;
+  }
+
+  return rawValue === "true" || rawValue === "1" || rawValue === "yes";
+}
+
+function readNumberEnv(name: string, defaultValue: number): number {
+  const rawValue = (process.env[name] || "").trim();
+  if (!rawValue) {
+    return defaultValue;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
+function buildFallbackModel(
+  nvidia: ReturnType<typeof createOpenAI>,
+  fallbackModelId: string,
+) {
+  const enableThinking = readBooleanEnv("NVIDIA_FALLBACK_ENABLE_THINKING", true);
+  const reasoningBudget = readNumberEnv("NVIDIA_FALLBACK_REASONING_BUDGET", 16384);
+
+  return experimental_wrapLanguageModel({
+    model: nvidia(fallbackModelId),
+    modelId: fallbackModelId,
+    middleware: {
+      transformParams: async ({ params }) => ({
+        ...params,
+        providerOptions: {
+          openai: {
+            chat_template_kwargs: {
+              enable_thinking: enableThinking,
+            },
+            reasoning_budget: reasoningBudget,
+          },
+        },
+      }),
+    },
+  });
 }
 
 export async function POST(req: Request) {
@@ -147,13 +192,21 @@ export async function POST(req: Request) {
       apiKey: process.env.NVIDIA_API_KEY || "",
     });
 
+    const primaryModelId = (process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b").trim();
+    const fallbackModelId = (process.env.NVIDIA_FALLBACK_MODEL || "nvidia/nemotron-3-ultra-550b-a55b").trim();
+    const useFallbackModel = readBooleanEnv("NVIDIA_USE_FALLBACK_MODEL", false);
+
+    const activeModel = useFallbackModel
+      ? buildFallbackModel(nvidia, fallbackModelId)
+      : nvidia(primaryModelId);
+
     const coreMessages: CoreMessage[] = messages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
     const result = streamText({
-      model: nvidia(process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"),
+      model: activeModel,
       system,
       messages: coreMessages,
       temperature: Number(process.env.JW_CHAT_TEMPERATURE || "1.25"),
