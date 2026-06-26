@@ -11,7 +11,7 @@ citations and a Sources panel.
 - Tailwind CSS + shadcn-style UI primitives
 - Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`)
 - Qdrant for vector search
-- DGX Spark for embeddings (BAAI/bge-large-en-v1.5) and LLM (`jw-llm`)
+- DGX Spark for embeddings (BAAI/bge-large-en-v1.5) and LLM (`qwen/qwen3.5-397b-a17b`)
 
 ## Local development
 

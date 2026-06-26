@@ -6,7 +6,7 @@
 //
 // So this helper does: fetch -> chunk -> embed -> upsert.
 
-import { embedQuery } from "@/lib/embed";
+import { embedQuery } from "./embed";
 
 const JW_HOSTS = new Set(["www.jw.org", "wol.jw.org"]);
 

@@ -14,7 +14,7 @@ content at https://wol.jw.org/en and https://www.jw.org/en.
 | Crawler      | Python + Scrapy + httpx                                     |
 | Parser       | BeautifulSoup, markdown chunker with rich metadata          |
 | Embeddings   | BAAI/bge-large-en-v1.5 (local, on NVIDIA DGX Spark)         |
-| LLM          | Qwen2.5-14B-Instruct via vLLM (OpenAI-compatible) on DGX    |
+| LLM          | qwen/qwen3.5-397b-a17b via vLLM (OpenAI-compatible) on DGX  |
 | Vector DB    | Qdrant (self-hosted, Docker, on DGX)                        |
 | Backend      | Next.js 15 route handlers + Vercel AI SDK (@ai-sdk/openai)  |
 | Frontend     | Next.js 15 chat UI, deployed on Vercel                      |

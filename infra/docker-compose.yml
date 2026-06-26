@@ -21,11 +21,7 @@ services:
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
     command: >
-      --model Qwen/Qwen2.5-14B-Instruct
-      --served-model-name jw-llm
-      --max-model-len 8192
-      --gpu-memory-utilization 0.85
-      --api-key ${DGX_API_KEY}
+      --model Qwen/Qwen2.5-14B-Instruct --served-model-name qwen/qwen3.5-397b-a17b --max-model-len 8192 --gpu-memory-utilization 0.85 --api-key ${DGX_API_KEY}
     ports:
       - "8000:8000"
     volumes:
@@ -36,7 +32,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     restart: unless-stopped
 
   embed:
@@ -44,9 +40,7 @@ services:
     container_name: jw_embed
     runtime: nvidia
     command: >
-      --model-id BAAI/bge-large-en-v1.5
-      --port 8001
-      --api-key ${DGX_API_KEY}
+      --model-id BAAI/bge-large-en-v1.5 --port 8001 --api-key ${DGX_API_KEY}
     ports:
       - "8001:8001"
     volumes:
@@ -57,7 +51,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     restart: unless-stopped
 
   # Polite web crawler scheduler.
