@@ -19,10 +19,10 @@ function isLocalUrl(url: string): boolean {
 export async function qdrantSearch(
   vector: number[],
   topK: number,
-  filter?: Record<string, unknown>
+  filter?: Record<string, unknown>,
 ): Promise<Chunk[]> {
   const base = process.env.QDRANT_URL;
-  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "5000");
+  const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "10000");
   if (!base) {
     throw new Error("QDRANT_URL must be set");
   }
@@ -58,19 +58,34 @@ export async function qdrantSearch(
     const message = err instanceof Error ? err.message : String(err);
     const lower = message.toLowerCase();
     if (lower.includes("timeout") || lower.includes("abort")) {
-      throw new Error("Qdrant search timed out after " + timeoutMs + "ms (endpoint: " + endpoint + ")");
+      throw new Error(
+        "Qdrant search timed out after " +
+          timeoutMs +
+          "ms (endpoint: " +
+          endpoint +
+          ")",
+      );
     }
-    throw new Error("Qdrant search transport failed: " + message + " (endpoint: " + endpoint + ")");
+    throw new Error(
+      "Qdrant search transport failed: " +
+        message +
+        " (endpoint: " +
+        endpoint +
+        ")",
+    );
   }
 
   if (!res.ok) {
     const body = await res.text();
     const trimmed = body.trimStart();
-    const isHtml = trimmed.startsWith("<!") || trimmed.toLowerCase().startsWith("<html");
+    const isHtml =
+      trimmed.startsWith("<!") || trimmed.toLowerCase().startsWith("<html");
     const detail = isHtml
       ? `gateway/proxy error — the Qdrant host is unreachable (endpoint: ${endpoint})`
       : body.slice(0, 300);
-    throw new Error(`Qdrant search failed with status ${res.status}: ${detail}`);
+    throw new Error(
+      `Qdrant search failed with status ${res.status}: ${detail}`,
+    );
   }
 
   const json = (await res.json()) as {

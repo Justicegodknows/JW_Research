@@ -13,10 +13,11 @@ function isLocalUrl(url: string): boolean {
 }
 
 export async function embedQuery(text: string): Promise<number[]> {
-  const base = process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
+  const base =
+    process.env.NVIDIA_EMBED_URL || "https://integrate.api.nvidia.com/v1";
   const model = process.env.NVIDIA_EMBED_MODEL || "NV-Embed-QA";
   const key = process.env.NVIDIA_API_KEY;
-  const timeoutMs = Number(process.env.NVIDIA_EMBED_TIMEOUT_MS || "5000");
+  const timeoutMs = Number(process.env.NVIDIA_EMBED_TIMEOUT_MS || "15000");
 
   // Allow empty API key for local development
   if (!key && !isLocalUrl(base)) {
@@ -38,7 +39,7 @@ export async function embedQuery(text: string): Promise<number[]> {
       noV1Base + "/v1/embeddings",
       // Preserve exact base shape with /embeddings for custom deployments
       trimmed + "/embeddings",
-    ])
+    ]),
   );
 
   let lastError: string | null = null;
@@ -63,10 +64,20 @@ export async function embedQuery(text: string): Promise<number[]> {
       const lower = message.toLowerCase();
       if (lower.includes("timeout") || lower.includes("abort")) {
         throw new Error(
-          "Embedding request timed out after " + timeoutMs + "ms (endpoint: " + endpoint + ")"
+          "Embedding request timed out after " +
+            timeoutMs +
+            "ms (endpoint: " +
+            endpoint +
+            ")",
         );
       }
-      throw new Error("Embedding request transport failed: " + message + " (endpoint: " + endpoint + ")");
+      throw new Error(
+        "Embedding request transport failed: " +
+          message +
+          " (endpoint: " +
+          endpoint +
+          ")",
+      );
     }
 
     if (res.ok) {
@@ -84,7 +95,13 @@ export async function embedQuery(text: string): Promise<number[]> {
     // If we got a 404, try the next candidate. Otherwise fail fast.
     if (res.status !== 404) {
       throw new Error(
-        "Embedding request failed: " + res.status + " " + body + " (endpoint: " + endpoint + ")"
+        "Embedding request failed: " +
+          res.status +
+          " " +
+          body +
+          " (endpoint: " +
+          endpoint +
+          ")",
       );
     }
     lastError = body;
@@ -92,9 +109,9 @@ export async function embedQuery(text: string): Promise<number[]> {
 
   throw new Error(
     "Embedding request failed: 404 " +
-    (lastError || "not found") +
-    " (tried: " +
-    candidates.join(", ") +
-    ")"
+      (lastError || "not found") +
+      " (tried: " +
+      candidates.join(", ") +
+      ")",
   );
 }

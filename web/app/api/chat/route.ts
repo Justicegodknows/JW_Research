@@ -1,9 +1,13 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { experimental_wrapLanguageModel, streamText, type CoreMessage } from "ai";
+import {
+  experimental_wrapLanguageModel,
+  streamText,
+  type CoreMessage,
+} from "ai";
 import { buildPromptArtifacts, type ChatMessage } from "@/lib/prompt-assembly";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const ALLOWED_METHODS = "POST, OPTIONS, GET";
 const CORS_HEADERS = {
@@ -26,7 +30,7 @@ export async function GET() {
         Allow: ALLOWED_METHODS,
         ...CORS_HEADERS,
       },
-    }
+    },
   );
 }
 
@@ -78,8 +82,14 @@ function buildFallbackModel(
   nvidia: ReturnType<typeof createOpenAI>,
   fallbackModelId: string,
 ) {
-  const enableThinking = readBooleanEnv("NVIDIA_FALLBACK_ENABLE_THINKING", true);
-  const reasoningBudget = readNumberEnv("NVIDIA_FALLBACK_REASONING_BUDGET", 16384);
+  const enableThinking = readBooleanEnv(
+    "NVIDIA_FALLBACK_ENABLE_THINKING",
+    true,
+  );
+  const reasoningBudget = readNumberEnv(
+    "NVIDIA_FALLBACK_REASONING_BUDGET",
+    16384,
+  );
 
   return experimental_wrapLanguageModel({
     model: nvidia(fallbackModelId),
@@ -104,8 +114,10 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { messages: ChatMessage[] };
     const backendUrl = (process.env.BACKEND_URL || "").trim();
-    const backendPath = (process.env.BACKEND_CHAT_PATH || "/api/chat").trim() || "/api/chat";
-    const allowLocalFallback = (process.env.BACKEND_ALLOW_LOCAL_FALLBACK || "true") === "true";
+    const backendPath =
+      (process.env.BACKEND_CHAT_PATH || "/api/chat").trim() || "/api/chat";
+    const allowLocalFallback =
+      (process.env.BACKEND_ALLOW_LOCAL_FALLBACK || "true") === "true";
     const proxyHop = req.headers.get("x-jw-proxy-hop") === "1";
 
     // Optional production mode: forward chat traffic to an external backend
@@ -114,9 +126,13 @@ export async function POST(req: Request) {
       const shouldProxy = true;
 
       if (shouldProxy) {
-        const normalizedPath = backendPath.startsWith("/") ? backendPath : "/" + backendPath;
+        const normalizedPath = backendPath.startsWith("/")
+          ? backendPath
+          : "/" + backendPath;
         const target = backendUrl.replace(/\/$/, "") + normalizedPath;
-        const proxyTimeoutMs = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "5000");
+        const proxyTimeoutMs = Number(
+          process.env.BACKEND_PROXY_TIMEOUT_MS || "5000",
+        );
         try {
           const upstream = await fetch(target, {
             method: "POST",
@@ -129,7 +145,8 @@ export async function POST(req: Request) {
           });
 
           if (!upstream.ok) {
-            const shouldForceLocalFallback = upstream.status === 404 || upstream.status === 405;
+            const shouldForceLocalFallback =
+              upstream.status === 404 || upstream.status === 405;
             if (!allowLocalFallback && !shouldForceLocalFallback) {
               const headers = new Headers(upstream.headers);
               return new Response(upstream.body, {
@@ -142,7 +159,11 @@ export async function POST(req: Request) {
             const allow = upstream.headers.get("allow") || "";
             console.warn(
               "Proxy backend returned non-OK; falling back to local RAG.",
-              JSON.stringify({ status: upstream.status, allow, forced: shouldForceLocalFallback })
+              JSON.stringify({
+                status: upstream.status,
+                allow,
+                forced: shouldForceLocalFallback,
+              }),
             );
           } else {
             const headers = new Headers(upstream.headers);
@@ -153,7 +174,8 @@ export async function POST(req: Request) {
             });
           }
         } catch (proxyErr) {
-          const message = proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+          const message =
+            proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
           const timeout = isTimeoutLikeError(proxyErr);
           if (!allowLocalFallback) {
             return Response.json(
@@ -165,13 +187,13 @@ export async function POST(req: Request) {
                   ? "Proxy timeout to DGX backend. Verify Cloudflare Tunnel route and backend health."
                   : "Proxy connection to DGX backend failed. Verify BACKEND_URL/BACKEND_CHAT_PATH and network reachability.",
               },
-              { status: timeout ? 504 : 502 }
+              { status: timeout ? 504 : 502 },
             );
           }
 
           console.warn(
             "Proxy backend request failed; falling back to local RAG.",
-            JSON.stringify({ target, message })
+            JSON.stringify({ target, message }),
           );
         }
       }
@@ -184,16 +206,35 @@ export async function POST(req: Request) {
       return new Response("No user message", { status: 400 });
     }
 
-    const { system, sources } = await buildPromptArtifacts(lastUser.content);
+    const preStreamTimeoutMs = Number(
+      process.env.PRE_STREAM_TIMEOUT_MS || "25000",
+    );
+    const preStreamAbort = new AbortController();
+    const preStreamTimer = setTimeout(
+      () => preStreamAbort.abort(),
+      preStreamTimeoutMs,
+    );
+    let system: string;
+    let sources: Awaited<ReturnType<typeof buildPromptArtifacts>>["sources"];
+    try {
+      ({ system, sources } = await buildPromptArtifacts(lastUser.content));
+    } finally {
+      clearTimeout(preStreamTimer);
+    }
 
     // 4. Stream the answer via NVIDIA NIM (OpenAI-compatible).
     const nvidia = createOpenAI({
-      baseURL: process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
+      baseURL:
+        process.env.NVIDIA_LLM_URL || "https://integrate.api.nvidia.com/v1",
       apiKey: process.env.NVIDIA_API_KEY || "",
     });
 
-    const primaryModelId = (process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b").trim();
-    const fallbackModelId = (process.env.NVIDIA_FALLBACK_MODEL || "nvidia/nemotron-3-ultra-550b-a55b").trim();
+    const primaryModelId = (
+      process.env.NVIDIA_MODEL || "qwen/qwen3.5-397b-a17b"
+    ).trim();
+    const fallbackModelId = (
+      process.env.NVIDIA_FALLBACK_MODEL || "nvidia/nemotron-3-ultra-550b-a55b"
+    ).trim();
     const useFallbackModel = readBooleanEnv("NVIDIA_USE_FALLBACK_MODEL", false);
 
     const activeModel = useFallbackModel
@@ -216,18 +257,25 @@ export async function POST(req: Request) {
       presencePenalty: Number(process.env.JW_CHAT_PRESENCE_PENALTY || "0.6"),
       frequencyPenalty: Number(process.env.JW_CHAT_FREQUENCY_PENALTY || "0.3"),
       maxRetries: 0,
+      abortSignal: req.signal,
     });
 
-    void result.text.then((finalMessage) => {
-      if (finalMessage.trim()) {
-        console.info("/api/chat final assistant message assembled.", {
-          chars: finalMessage.length,
-        });
-      }
-    }).catch((finalErr) => {
-      const message = finalErr instanceof Error ? finalErr.message : String(finalErr);
-      console.warn("/api/chat final assistant message capture failed:", message);
-    });
+    void result.text
+      .then((finalMessage) => {
+        if (finalMessage.trim()) {
+          console.info("/api/chat final assistant message assembled.", {
+            chars: finalMessage.length,
+          });
+        }
+      })
+      .catch((finalErr) => {
+        const message =
+          finalErr instanceof Error ? finalErr.message : String(finalErr);
+        console.warn(
+          "/api/chat final assistant message capture failed:",
+          message,
+        );
+      });
 
     const response = result.toDataStreamResponse({
       getErrorMessage: (error) => {
@@ -239,11 +287,23 @@ export async function POST(req: Request) {
           : `LLM stream failed: ${detail}`;
       },
     });
-    response.headers.set("x-jw-sources", encodeURIComponent(JSON.stringify(sources)));
+    response.headers.set(
+      "x-jw-sources",
+      encodeURIComponent(JSON.stringify(sources)),
+    );
     response.headers.set("Allow", ALLOWED_METHODS);
-    response.headers.set("Access-Control-Allow-Origin", CORS_HEADERS["Access-Control-Allow-Origin"]);
-    response.headers.set("Access-Control-Allow-Methods", CORS_HEADERS["Access-Control-Allow-Methods"]);
-    response.headers.set("Access-Control-Allow-Headers", CORS_HEADERS["Access-Control-Allow-Headers"]);
+    response.headers.set(
+      "Access-Control-Allow-Origin",
+      CORS_HEADERS["Access-Control-Allow-Origin"],
+    );
+    response.headers.set(
+      "Access-Control-Allow-Methods",
+      CORS_HEADERS["Access-Control-Allow-Methods"],
+    );
+    response.headers.set(
+      "Access-Control-Allow-Headers",
+      CORS_HEADERS["Access-Control-Allow-Headers"],
+    );
     return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -263,7 +323,7 @@ export async function POST(req: Request) {
           Allow: ALLOWED_METHODS,
           ...CORS_HEADERS,
         },
-      }
+      },
     );
   }
 }

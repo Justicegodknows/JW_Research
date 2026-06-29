@@ -22,7 +22,8 @@ function isAllowedJwUrl(u: string): boolean {
     const p = url.pathname || "/";
 
     // Keep to English content areas.
-    const isEnglish = p.startsWith("/en/") || p.includes("/lp-e/") || p.includes("/r1/");
+    const isEnglish =
+      p.startsWith("/en/") || p.includes("/lp-e/") || p.includes("/r1/");
     if (!isEnglish) return false;
 
     // Avoid large/binary assets.
@@ -50,7 +51,9 @@ function isAllowedJwUrl(u: string): boolean {
 function stripHtmlToText(html: string): { title: string; text: string } {
   // Very lightweight HTML-to-text extraction (no DOM libs in route).
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const title = ((titleMatch && titleMatch[1]) || "").replace(/\s+/g, " ").trim();
+  const title = ((titleMatch && titleMatch[1]) || "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   // Remove scripts/styles.
   let s = html.replace(/<script[\s\S]*?<\/script>/gi, " ");
@@ -84,16 +87,23 @@ function isLocalUrl(url: string): boolean {
   return url.includes("localhost") || url.includes("127.0.0.1");
 }
 
-async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payload: any }>) {
+async function qdrantUpsert(
+  points: Array<{ id: string; vector: number[]; payload: any }>,
+) {
   const base = process.env.QDRANT_URL;
   if (!base) throw new Error("QDRANT_URL must be set");
   const timeoutMs = Number(process.env.QDRANT_TIMEOUT_MS || "5000");
   const collection = process.env.QDRANT_COLLECTION || "jw_research";
 
   const endpoint =
-    base.replace(/\/$/, "") + "/collections/" + collection + "/points?wait=true";
+    base.replace(/\/$/, "") +
+    "/collections/" +
+    collection +
+    "/points?wait=true";
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   const key = process.env.QDRANT_API_KEY;
   const isLocal = isLocalUrl(base);
   if (key || isLocal) {
@@ -113,7 +123,9 @@ async function qdrantUpsert(points: Array<{ id: string; vector: number[]; payloa
   }
 }
 
-export async function liveFetchAndIngest(url: string): Promise<{ ingested: number }> {
+export async function liveFetchAndIngest(
+  url: string,
+): Promise<{ ingested: number }> {
   if (!isAllowedJwUrl(url)) {
     return { ingested: 0 };
   }
@@ -127,7 +139,7 @@ export async function liveFetchAndIngest(url: string): Promise<{ ingested: numbe
       "User-Agent":
         process.env.JW_USER_AGENT ||
         "JW_Research_Personal_Bot/0.1 (private study; contact: owner)",
-      "Accept": "text/html,application/xhtml+xml",
+      Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "en-US,en;q=0.9",
     },
     signal: AbortSignal.timeout(timeoutMs),
@@ -145,31 +157,31 @@ export async function liveFetchAndIngest(url: string): Promise<{ ingested: numbe
   const chunks = chunkText(extracted.text);
   if (chunks.length === 0) return { ingested: 0 };
 
-  // Embed & upsert.
-  const points: Array<{ id: string; vector: number[]; payload: any }> = [];
-  const maxChunks = Number(process.env.JW_LIVE_INGEST_MAX_CHUNKS || "6");
-  for (let i = 0; i < Math.min(chunks.length, maxChunks); i++) {
-    const c = chunks[i];
-    const vec = await embedQuery(c);
+  // Embed & upsert — parallelize embeddings to avoid sequential latency.
+  const maxChunks = Number(process.env.JW_LIVE_INGEST_MAX_CHUNKS || "3");
+  const selected = chunks.slice(0, maxChunks);
 
-    // Create deterministic ids from URL + chunk index.
-    // Using base64 (not URL-safe) is fine for Qdrant ids as strings.
-    const id = "live:" + Buffer.from(url + "#" + i).toString("base64");
+  const embedded = await Promise.all(
+    selected.map(async (c, i) => {
+      const vec = await embedQuery(c);
+      // Create deterministic ids from URL + chunk index.
+      const id = "live:" + Buffer.from(url + "#" + i).toString("base64");
+      return {
+        id,
+        vector: vec,
+        payload: {
+          url,
+          title: extracted.title || "Untitled",
+          publication: "",
+          language: "en",
+          source: "live",
+          text: c,
+        },
+      };
+    }),
+  );
 
-    points.push({
-      id,
-      vector: vec,
-      payload: {
-        url,
-        title: extracted.title || "Untitled",
-        publication: "",
-        language: "en",
-        source: "live",
-        text: c,
-      },
-    });
-  }
-
+  const points = embedded.filter(Boolean);
   await qdrantUpsert(points);
   return { ingested: points.length };
 }
