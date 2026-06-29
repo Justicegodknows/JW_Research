@@ -140,6 +140,53 @@ wol.jw.org / jw.org  →  [crawler/]  →  raw HTML  →  [indexer/parser]
 - **DGX access**: Protected by bearer token; Cloudflare Tunnel adds TLS layer
 - **Source attribution**: Every answer cites URL + paragraph number
 
+## Debugging
+
+### VS Code launch configurations (`.vscode/launch.json`)
+
+| Config name | What it debugs |
+|---|---|
+| `Next.js: debug server` | Launches `npm run dev` in `web/` with `--inspect` and attaches Chrome DevTools |
+| `Next.js: attach to running dev server` | Attaches to an already-running `next dev` on port 9229 |
+| `Python: crawler (wol spider)` | Runs `crawler.run` limited to 10 items via debugpy |
+| `Python: indexer pipeline` | Runs `indexer.pipeline` end-to-end via debugpy |
+| `Python: download_pubs` | Runs `download_pubs.py --only books` via debugpy |
+| `Python: main.py web_search` | Runs `main.py web_search` tool with a sample query |
+| `Python: attach to remote debugpy` | Attaches to a remote/container debugpy on port 5678 |
+| `Jest: run all web tests` | Launches Jest in the `web/` directory with breakpoint support |
+| `Playwright: debug E2E tests` | Runs Playwright tests with the interactive debugger |
+
+### Installing debug dependencies
+
+**Python** (all Python components share the crawler venv):
+```bash
+cd crawler && pip install debugpy  # or: pip install -r requirements.txt
+```
+`debugpy>=1.8.0` is now listed in `crawler/requirements.txt`.
+
+**Node.js/Next.js**: The VS Code built-in Node debugger (`ms-vscode.js-debug`) works without extra packages. Install recommended extensions from `.vscode/extensions.json`:
+```
+Extensions: Install Workspace Recommended Extensions
+```
+
+### Python debugpy — quick remote attach
+```python
+import debugpy
+debugpy.listen(5678)
+debugpy.wait_for_client()  # pauses until VS Code attaches
+```
+Then launch `Python: attach to remote debugpy` in VS Code.
+
+### Recommended VS Code extensions
+
+All recommendations are in [.vscode/extensions.json](.vscode/extensions.json):
+- **ms-python.python** + **ms-python.debugpy** — Python language server and debugger
+- **charliermarsh.ruff** — fast Python linter/formatter
+- **dbaeumer.vscode-eslint** + **esbenp.prettier-vscode** — TypeScript/React linting
+- **firsttris.vscode-jest-runner** — run individual Jest tests with one click
+- **ms-playwright.playwright** — Playwright test runner integration
+- **usernamehw.errorlens** — inline error highlighting
+
 ## When to Ask for Help
 
 - **Unsure which component to modify?** → See [ARCHITECTURE.md](ARCHITECTURE.md) data flow

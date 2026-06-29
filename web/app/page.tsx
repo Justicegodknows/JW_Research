@@ -11,10 +11,58 @@ import { cn } from "@/lib/utils";
 
 type SourcesByMessageId = Record<string, Source[]>;
 
+function buildStreamingBlocks(content: string): string[] {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphBlocks = normalized
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const blocks: string[] = [];
+  paragraphBlocks.forEach((paragraph) => {
+    if (paragraph.length <= 240) {
+      blocks.push(paragraph);
+      return;
+    }
+
+    // Keep long paragraphs readable while tokens are still streaming.
+    const sentenceParts = paragraph
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (sentenceParts.length <= 1) {
+      blocks.push(paragraph);
+      return;
+    }
+
+    let current = "";
+    sentenceParts.forEach((sentence) => {
+      const candidate = current ? `${current} ${sentence}` : sentence;
+      if (candidate.length > 240 && current) {
+        blocks.push(current);
+        current = sentence;
+        return;
+      }
+      current = candidate;
+    });
+
+    if (current) {
+      blocks.push(current);
+    }
+  });
+
+  return blocks;
+}
+
 // Parse citations like [1], [2] and convert to interactive markers.
 function parseContentWithCitations(
   content: string,
-  sources: Source[] | undefined
+  sources: Source[] | undefined,
 ): React.ReactNode {
   if (!sources || sources.length === 0) {
     return content;
@@ -44,58 +92,56 @@ function parseContentWithCitations(
 }
 
 export default function ChatPage() {
-  const [sourcesByMsg, setSourcesByMsg] = React.useState<SourcesByMessageId>({});
+  const [sourcesByMsg, setSourcesByMsg] = React.useState<SourcesByMessageId>(
+    {},
+  );
   const [isLoading, setIsLoading] = React.useState(false);
   const [uiError, setUiError] = React.useState<string | null>(null);
   const [lastSubmittedInput, setLastSubmittedInput] = React.useState("");
   const finalAssistantMessageRef = React.useRef("");
   const pendingSourcesRef = React.useRef<Source[] | null>(null);
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    append,
-    stop
-  } = useChat({
-    api: "/api/chat",
-    streamProtocol: "data",
-    onResponse(response) {
-      if (!response.ok) {
-        setIsLoading(false);
-        pendingSourcesRef.current = null;
-        setUiError("Request failed. Please check your backend and environment settings.");
-        return;
-      }
+  const { messages, input, handleInputChange, handleSubmit, append, stop } =
+    useChat({
+      api: "/api/chat",
+      streamProtocol: "data",
+      onResponse(response) {
+        if (!response.ok) {
+          setIsLoading(false);
+          pendingSourcesRef.current = null;
+          setUiError(
+            "Request failed. Please check your backend and environment settings.",
+          );
+          return;
+        }
 
-      setUiError(null);
-      setIsLoading(true);
-      const raw = response.headers.get("x-jw-sources");
-      if (raw) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(raw)) as Source[];
-          pendingSourcesRef.current = parsed;
-        } catch {
+        setUiError(null);
+        setIsLoading(true);
+        const raw = response.headers.get("x-jw-sources");
+        if (raw) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(raw)) as Source[];
+            pendingSourcesRef.current = parsed;
+          } catch {
+            pendingSourcesRef.current = null;
+          }
+        }
+      },
+      onFinish(message) {
+        setIsLoading(false);
+        finalAssistantMessageRef.current = message.content;
+        if (pendingSourcesRef.current) {
+          const s = pendingSourcesRef.current;
+          setSourcesByMsg((prev) => ({ ...prev, [message.id]: s }));
           pendingSourcesRef.current = null;
         }
-      }
-    },
-    onFinish(message) {
-      setIsLoading(false);
-      finalAssistantMessageRef.current = message.content;
-      if (pendingSourcesRef.current) {
-        const s = pendingSourcesRef.current;
-        setSourcesByMsg((prev) => ({ ...prev, [message.id]: s }));
+      },
+      onError(error) {
+        setIsLoading(false);
         pendingSourcesRef.current = null;
-      }
-    },
-    onError(error) {
-      setIsLoading(false);
-      pendingSourcesRef.current = null;
-      setUiError(error?.message || "Request failed. Please try again.");
-    }
-  });
+        setUiError(error?.message || "Request failed. Please try again.");
+      },
+    });
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     setUiError(null);
@@ -119,10 +165,19 @@ export default function ChatPage() {
   };
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const latestAssistantMessageId = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") {
+        return messages[i].id;
+      }
+    }
+    return null;
+  }, [messages]);
+
   React.useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
-      behavior: "smooth"
+      behavior: "smooth",
     });
   }, [messages, isLoading]);
 
@@ -174,18 +229,25 @@ export default function ChatPage() {
           <ul className="space-y-6">
             {messages.map((m, idx) => {
               const isUser = m.role === "user";
+              const isStreamingAssistant =
+                m.role === "assistant" &&
+                isLoading &&
+                m.id === latestAssistantMessageId;
               const text =
                 typeof m.content === "string"
                   ? m.content
                   : (m as unknown as { content: string }).content || "";
               const srcs = sourcesByMsg[m.id];
+              const streamingBlocks = isStreamingAssistant
+                ? buildStreamingBlocks(text)
+                : [];
 
               return (
                 <li
                   key={m.id}
                   className={cn(
                     "flex animate-slide-up",
-                    isUser ? "justify-end" : "justify-start"
+                    isUser ? "justify-end" : "justify-start",
                   )}
                   style={{ animationDelay: `${idx * 50}ms` }}
                 >
@@ -194,12 +256,32 @@ export default function ChatPage() {
                       "max-w-[85%] sm:max-w-[85%] w-full rounded-2xl px-4 sm:px-5 py-3 sm:py-4 text-sm leading-relaxed shadow-sm",
                       isUser
                         ? "bg-primary text-primary-foreground"
-                        : "bg-card text-card-foreground border border-border/50"
+                        : "bg-card text-card-foreground border border-border/50",
                     )}
                   >
-                    <div className="whitespace-pre-wrap">
-                      {isUser ? text : parseContentWithCitations(text, srcs)}
-                    </div>
+                    {isStreamingAssistant ? (
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+                          <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                          Streaming response
+                        </div>
+                        <div className="space-y-2">
+                          {streamingBlocks.map((block, blockIdx) => (
+                            <div
+                              key={`${m.id}-chunk-${blockIdx}`}
+                              className="rounded-lg border border-border/50 bg-background/60 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap animate-fade-in motion-safe:transition-all motion-safe:duration-300"
+                              style={{ animationDelay: `${blockIdx * 80}ms` }}
+                            >
+                              {block}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap">
+                        {isUser ? text : parseContentWithCitations(text, srcs)}
+                      </div>
+                    )}
                     {!isUser && srcs && <SourcesPanel sources={srcs} />}
                   </div>
                 </li>
@@ -274,9 +356,15 @@ export default function ChatPage() {
             )}
           </form>
           <p className="mt-2 hidden sm:block text-center text-[11px] text-muted-foreground">
-            Press <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Enter</kbd> to send,{' '}
-            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Shift+Enter</kbd> for new line. Answers are grounded
-            with sources.
+            Press{" "}
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">
+              Enter
+            </kbd>{" "}
+            to send,{" "}
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">
+              Shift+Enter
+            </kbd>{" "}
+            for new line. Answers are grounded with sources.
           </p>
           <p className="mt-2 block sm:hidden text-center text-[11px] text-muted-foreground">
             Tap send button or press Enter. Answers are grounded with sources.
