@@ -5,10 +5,5 @@
       "src": "web/package.json",
       "use": "@vercel/next"
     }
-  ],
-  "functions": {
-    "web/app/api/chat/route.ts": {
-      "maxDuration": 300
-    }
-  }
+  ]
 }
